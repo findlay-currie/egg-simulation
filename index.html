@@ -1,0 +1,2025 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Raw Egg Spread Simulator (3D)</title>
+<link rel="icon" href="data:,">
+<style>
+  :root {
+    --panel: rgba(18, 20, 26, 0.82);
+    --line: rgba(255, 255, 255, 0.10);
+    --text: #e9ecf2;
+    --muted: #9aa3b2;
+    --accent: #ffb238;
+    --good: #7bd88f;
+    --warn: #ffcf5c;
+    --info: #8ab4ff;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0e1014; color: var(--text);
+    font: 13px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  canvas#three { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); box-shadow: 0 8px 28px rgba(0,0,0,.35); }
+  button, select { font: inherit; color: var(--text); background: rgba(255,255,255,.07); border: 1px solid var(--line);
+    border-radius: 8px; padding: 6px 10px; cursor: pointer; }
+  button:hover, select:hover { background: rgba(255,255,255,.13); }
+  button.on { background: rgba(255,178,56,.18); border-color: rgba(255,178,56,.55); }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+  /* HUD */
+  #hud { position: fixed; top: 12px; left: 12px; width: min(330px, calc(100vw - 24px)); padding: 10px 12px; z-index: 5; }
+  #hud h1 { font-size: 14px; margin: 0 0 2px; font-weight: 650; letter-spacing: .1px; }
+  #hud .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 6px; }
+  #hud .grid { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+  #hud .k { color: var(--muted); }
+  #hud .v { text-align: right; font-variant-numeric: tabular-nums; }
+  #hud .big { font-size: 15px; font-weight: 650; }
+  .grade { display: inline-block; padding: 0 6px; border-radius: 6px; font-size: 11px; margin-left: 4px; background: rgba(123,216,143,.18); color: var(--good); }
+  .grade.A { background: rgba(138,180,255,.18); color: var(--info); }
+  .grade.B, .grade.C { background: rgba(255,207,92,.18); color: var(--warn); }
+  #hudMore { margin-top: 6px; }
+  #hudToggle { position: absolute; top: 8px; right: 8px; padding: 2px 8px; font-size: 12px; }
+  #xsec { width: 100%; height: 86px; display: block; margin-top: 6px; border-radius: 8px; background: rgba(255,255,255,.03); }
+  .status { font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+  .status b { color: var(--text); font-weight: 600; }
+
+  /* bottom bar */
+  #bar { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; gap: 6px; align-items: center;
+    padding: 6px; z-index: 6; flex-wrap: wrap; justify-content: center; max-width: calc(100vw - 16px); }
+  #bar .sep { width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+
+  /* side panel */
+  #panel { position: fixed; top: 12px; right: 12px; bottom: 70px; width: 340px; overflow-y: auto; padding: 4px 14px 14px; z-index: 5;
+    transition: transform .25s ease, opacity .25s ease; }
+  #panel.closed { transform: translateX(calc(100% + 20px)); opacity: 0; pointer-events: none; }
+  #panel h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); margin: 14px 0 6px; font-weight: 650; }
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .presets button { padding: 6px 4px; font-size: 12px; }
+  .row { margin: 8px 0 10px; }
+  .row .lab { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .row .name { font-weight: 560; }
+  .row .val { font-variant-numeric: tabular-nums; color: var(--accent); white-space: nowrap; }
+  .row input[type=range] { width: 100%; margin: 4px 0 0; accent-color: var(--accent); }
+  .row .note { color: var(--muted); font-size: 11px; margin-top: 1px; }
+  .tag { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 5px; margin-left: 4px; vertical-align: 1px; font-weight: 600; }
+  .tag.m { background: rgba(123,216,143,.16); color: var(--good); }
+  .tag.c { background: rgba(138,180,255,.16); color: var(--info); }
+  .tag.a { background: rgba(255,207,92,.16); color: var(--warn); }
+  .seg { display: flex; gap: 4px; flex-wrap: wrap; }
+  .seg button { flex: 1; font-size: 12px; padding: 6px 6px; }
+  .legend { margin-top: 6px; display: none; }
+  .legend .barc { height: 10px; border-radius: 5px; }
+  .legend .ticks { display: flex; justify-content: space-between; color: var(--muted); font-size: 11px; }
+  .chk { display: flex; align-items: center; gap: 8px; margin: 6px 0; }
+  .hint { color: var(--muted); font-size: 11.5px; }
+
+  /* notes modal */
+  #notes { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 20; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #notes.open { display: flex; }
+  #notes .card { max-width: 760px; width: 100%; max-height: 88vh; overflow-y: auto; padding: 18px 22px; }
+  #notes h3 { margin: 18px 0 6px; font-size: 15px; }
+  #notes h3:first-of-type { margin-top: 4px; }
+  #notes p, #notes li { color: #d5dae3; }
+  #notes code { background: rgba(255,255,255,.08); padding: 0 4px; border-radius: 4px; }
+  #notes table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  #notes td, #notes th { border-bottom: 1px solid var(--line); padding: 5px 6px; text-align: left; vertical-align: top; }
+  #notes a { color: var(--info); }
+  #notes .close { float: right; }
+  .eq { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(255,255,255,.05); padding: 6px 10px; border-radius: 8px; display: block; margin: 6px 0; white-space: pre-wrap; }
+
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--muted); z-index: 30; pointer-events: none; }
+
+  @media (max-width: 760px) {
+    #hud { top: 8px; left: 8px; right: 8px; width: auto; padding: 8px 10px; font-size: 12px; }
+    #hud h1 { font-size: 13px; padding-right: 54px; }
+    #hud .sub { display: none; }
+    #xsec { height: 70px; }
+    #panel { top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64vh; border-radius: 16px 16px 0 0; padding-bottom: 84px; }
+    #panel.closed { transform: translateY(105%); }
+    #bar { bottom: 8px; left: 8px; right: 8px; transform: none; gap: 4px; padding: 5px; flex-wrap: nowrap; justify-content: space-between; max-width: none; }
+    #bar button, #bar select { padding: 7px 9px; font-size: 13px; flex: 1 1 auto; min-width: 0; }
+    #bar .wide { display: none; }
+    #bar #bRestart .lbl, #bar #bNotes .lbl { display: none; }
+  }
+</style>
+
+<style>
+  /* v3 additions */
+  .cookblock { margin-top: 6px; padding-top: 6px; border-top: 1px solid var(--line); display: none; }
+  #hud.cooking .cookblock { display: block; }
+  .done { margin-top: 4px; font-weight: 600; color: var(--accent); font-size: 12.5px; }
+  .done small { color: var(--muted); font-weight: 400; }
+  .hob { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+  .hob button { padding: 6px 0; font-size: 12.5px; font-weight: 600; }
+  .hob button.on { background: rgba(255,110,60,.22); border-color: rgba(255,120,70,.7); }
+  table.helper { width: 100%; border-collapse: collapse; font-size: 11.5px; margin-top: 8px; }
+  table.helper td, table.helper th { padding: 3px 4px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.helper th { color: var(--muted); font-weight: 600; }
+  table.helper tr.on td { background: rgba(255,120,70,.14); }
+  table.helper td:first-child { font-weight: 700; text-align: center; }
+  .eggrow { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .eggcount { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 600; }
+  #placeHint { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 15; padding: 10px 14px; display: none;
+    text-align: center; pointer-events: auto; max-width: calc(100vw - 32px); }
+  #placeHint.open { display: block; }
+  #placeHint b { color: var(--accent); }
+  #placeHint.top { top: auto; bottom: 86px; transform: translateX(-50%); }
+  #bAdd.on { background: rgba(255,178,56,.25); border-color: var(--accent); }
+  @media (max-width: 760px) {
+    #hud.cooking .rawonly { display: none; }
+    #bar #bPanel .lbl { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="three"></canvas>
+<div id="loading">Loading 3D engine…</div>
+
+<div id="hud" class="card">
+  <button id="hudToggle" title="Show or hide details">▾</button>
+  <h1 id="hudTitle">Raw egg on a flat surface</h1>
+  <div class="sub">Thin-film flow and heat model driven by measured egg properties</div>
+  <div class="grid">
+    <div class="k">Sim time</div><div class="v"><span id="rTime" class="big">0.00 s</span></div>
+    <div class="k rawonly" id="kDia">White spread Ø</div><div class="v rawonly" id="rDia">–</div>
+    <div class="k rawonly">Thick-white height</div><div class="v rawonly" id="rAlb">–</div>
+    <div class="k rawonly">Haugh unit</div><div class="v rawonly" id="rHU">–</div>
+    <div class="k rawonly">Yolk index (H/W)</div><div class="v rawonly" id="rYI">–</div>
+  </div>
+  <div class="cookblock">
+    <div class="grid">
+      <div class="k">Pan</div><div class="v" id="rPan">–</div>
+      <div class="k">White set</div><div class="v" id="rWset">–</div>
+      <div class="k">Yolk</div><div class="v" id="rYset">–</div>
+    </div>
+    <div class="done" id="rDone">–</div>
+  </div>
+  <div id="hudMore">
+    <div class="grid">
+      <div class="k">Thin-white edge height</div><div class="v" id="rEq">–</div>
+      <div class="k">Spread rate (edge speed)</div><div class="v" id="rU">–</div>
+      <div class="k">White film on yolk</div><div class="v" id="rFilm">–</div>
+      <div class="k">Volume check</div><div class="v" id="rVol">–</div>
+    </div>
+    <canvas id="xsec" width="600" height="172"></canvas>
+    <div class="status" id="status">Starting…</div>
+  </div>
+</div>
+
+<div id="panel" class="card">
+  <h2>Eggs</h2>
+  <div class="eggrow">
+    <span><span class="eggcount" id="eggCount">1</span> of 4 eggs</span>
+    <button id="pAdd">＋ Add egg (tap to place)</button>
+    <button id="pClear">Clear</button>
+  </div>
+  <div class="hint" style="margin:8px 0 4px">Quick layouts (re-cracks all eggs):</div>
+  <div class="seg" id="layoutSeg">
+    <button data-layout="1">1 egg</button><button data-layout="2">2 eggs</button><button data-layout="3">3 eggs</button><button data-layout="4">4 eggs</button>
+  </div>
+  <div class="hint" style="margin-top:6px">Whites flow into each other and merge; yolks drift with the white and push apart when they touch.</div>
+
+  <h2>Cooking (hob setting)</h2>
+  <div class="hob" id="hobSeg">
+    <button data-hob="0" class="on">Off</button><button data-hob="1">1</button><button data-hob="2">2</button><button data-hob="3">3</button><button data-hob="4">4</button><button data-hob="5">5</button><button data-hob="6">6</button>
+  </div>
+  <div class="row" data-key="panSet"></div>
+  <table class="helper" id="hobTable">
+    <tr><th>Hob</th><th>Pan ≈</th><th>Model, 1 egg, no lid (time to 97 % of white set)</th></tr>
+    <tr data-h="1"><td>1</td><td>100 °C</td><td>Barely sizzles. Very slow: over 10 min, and the top may never set without a lid.</td></tr>
+    <tr data-h="2"><td>2</td><td>125 °C</td><td>Gentle, ~4½ min. No browning — the pale, tender fried egg.</td></tr>
+    <tr data-h="3"><td>3</td><td>150 °C</td><td>Medium, ~3 min. A little colour at the very edge after ~3 min.</td></tr>
+    <tr data-h="4"><td>4</td><td>175 °C</td><td>Medium-high, ~2½ min. Edges brown from ~50 s.</td></tr>
+    <tr data-h="5"><td>5</td><td>200 °C</td><td>Hot, ~2¼ min. Crisp brown lace from ~30 s.</td></tr>
+    <tr data-h="6"><td>6</td><td>230 °C</td><td>Max, ~2 min. Browning from ~25 s; edges burn if left.</td></tr>
+  </table>
+  <div class="hint" style="margin-top:6px">Recipes give 2–4 min for an uncovered sunny-side-up egg at medium-low to medium heat; hob 2–4 here gives 2½–4½ min. Above hob 4 the white sets only a little faster, because water holds it at 100 °C — extra heat mostly browns the bottom. At every setting the yolk centre stays runny for 10+ min and a thin raw layer stays on top by the yolk (this model has no lid). More eggs cool the pan and slow everything. Pan temperatures are an <b>approximate</b> mapping: hob manuals only say 1 = low and 6 = high. Turning the heat on moves the eggs into a preheated non-stick pan.</div>
+
+  <h2>Egg freshness preset</h2>
+  <div class="presets">
+    <button data-preset="fresh">Very fresh</button>
+    <button data-preset="shop" class="on">Supermarket</button>
+    <button data-preset="old">Old (weak white)</button>
+  </div>
+  <div class="hint" style="margin-top:6px">Presets change the thick-white strength, thick/thin split and yolk shape, then re-crack the eggs.</div>
+
+  <h2>Density</h2>
+  <div class="row" data-key="rhoW"></div>
+  <div class="row" data-key="rhoY"></div>
+
+  <h2>Viscosity</h2>
+  <div class="row" data-key="muThin"></div>
+  <div class="row" data-key="muThick"></div>
+  <div class="row" data-key="muYolk"></div>
+
+  <h2>Gel strength &amp; shape</h2>
+  <div class="row" data-key="tauThick"></div>
+  <div class="row" data-key="thickFrac"></div>
+  <div class="row" data-key="yolkIndex"></div>
+  <div class="row" data-key="eggMass"></div>
+
+  <h2>Surface</h2>
+  <div class="seg" id="surfSeg">
+    <button data-surf="ceramic" class="on">Glazed plate</button>
+    <button data-surf="ptfe">Non-stick pan</button>
+    <button data-surf="glass">Glass</button>
+  </div>
+  <div class="row" data-key="theta"></div>
+  <div class="row" data-key="gamma"></div>
+
+  <h2>View</h2>
+  <div class="seg" id="modeSeg">
+    <button data-mode="real" class="on">Realistic</button>
+    <button data-mode="thick">Thickness</button>
+    <button data-mode="phase">Thick/thin</button>
+    <button data-mode="heat">Heat</button>
+  </div>
+  <div class="legend" id="legend">
+    <div class="barc" id="legendBar"></div>
+    <div class="ticks" id="legendTicks"></div>
+  </div>
+  <div class="row" data-key="exag"></div>
+  <label class="chk"><input type="checkbox" id="gridChk" checked> 1 cm grid on the surface</label>
+  <div class="seg" style="margin-top:6px">
+    <button id="vReset">3D view</button><button id="vTop">Top</button><button id="vSide">Side</button>
+  </div>
+  <div class="hint" style="margin-top:8px">Drag to rotate · right-drag or two fingers to pan · scroll or pinch to zoom.</div>
+  <div class="hint" style="margin-top:8px"><span class="tag m">measured</span> from a published source · <span class="tag c">calibrated</span> tuned to match a measured outcome · <span class="tag a">assumed</span> no source found</div>
+</div>
+
+<div id="bar" class="card">
+  <button id="bPlay" title="Play / pause">❚❚ <span class="lbl">Pause</span></button>
+  <button id="bRestart" title="Re-crack the same eggs">↺ <span class="lbl">Re-crack</span></button>
+  <button id="bAdd" title="Add an egg (up to 4)">＋ <span>Egg</span></button>
+  <select id="speed" title="Playback speed">
+    <option value="0.1">0.1×</option>
+    <option value="0.25">0.25×</option>
+    <option value="0.5" selected>0.5×</option>
+    <option value="1">1× real</option>
+    <option value="2">2×</option>
+    <option value="5">5×</option>
+    <option value="10">10×</option>
+    <option value="30">30×</option>
+  </select>
+  <div class="sep wide"></div>
+  <button id="bPanel" title="Physics and cooking controls">⚙ <span class="lbl">Controls</span></button>
+  <button id="bNotes" title="How the model works">ⓘ <span class="lbl">Model</span></button>
+</div>
+
+<div id="placeHint" class="card"><div id="placeText">Tap the surface where you want to crack the egg.</div><div style="margin-top:8px"><button id="placeCancel">Cancel</button></div></div>
+
+<div id="notes">
+  <div class="card">
+    <button class="close" id="notesClose">✕ Close</button>
+    <h3>In plain terms</h3>
+    <p>When the shell disappears, gravity pulls the egg white outwards and viscosity (the white's "thickness") resists it. Heavier (denser) liquid pushes harder; more viscous liquid moves slower. Two more things stop the spread:</p>
+    <ul>
+      <li><b>Thick white</b> is a soft gel. It only flows while the push from its own weight is bigger than its strength (a "yield stress"), so it stays piled up round the yolk. Fresher eggs have stronger gel, so it piles higher — that is what the industry's Haugh-unit test measures.</li>
+      <li><b>Thin white</b> runs out fast and stops when its edge is so thin that surface tension holds it in place (about 2–3 mm).</li>
+    </ul>
+    <p>The yolk is a liquid in a thin skin (the vitelline membrane). The skin, not viscosity, sets its final shape; the yolk's viscosity only controls how much it wobbles while it settles. The yolk sits <i>in</i> the white, and the thick white clings over it as a clear film wherever the gel is strong enough to hold on the slope.</p>
+    <p><b>Several eggs</b> share one sheet of white, so their whites flow into each other and merge. Yolks drift with the white around them and push apart when their skins touch.</p>
+    <p><b>Cooking.</b> Heat flows up from the pan through the white. Water stops the white getting hotter than 100 °C, so a hotter pan mostly cooks the <i>bottom</i> faster and browns thin edges sooner. The top loses heat to the air — mostly by evaporation — so the thickest white next to the yolk can stay raw on top; that is why cooks use a lid or baste. Cold eggs also draw heat out of the pan, so more eggs means a cooler pan. White starts to set at about 61–65 °C and is firm by about 80 °C; yolk thickens at about 65 °C and sets at about 70 °C. Set white stops flowing.</p>
+
+    <h3>How the model works</h3>
+    <span class="eq">FLOW
+Flow per unit width:   q = −K ∇P,   P = h + (ρ_yolk/ρ_white)·T_yolk   (yolk weight acts as extra height)
+Runny (Newtonian) layer:  K = ρ g h³ / (3μ)
+Gel (Bingham) layer:      Y = h − τ_y / (ρ g |∇P|),  K = ρ g Y² (3h − Y) / (6μ)
+Early collapse cap:       speed ≤ √(g h)
+Edge (contact line):      a dry spot only wets if the edge is deeper than h_eq = 2·√(γ/ρg)·sin(θ/2)
+Cooked white:             only the unset share of each column can flow
+Yolks:                    rest on the white; T(r) = H·√(1 − r²/a²); drift with the white in a ring
+                          round them; pushed apart if their footprints overlap
+White film on yolk:       t = τ_y / (ρ g sin α), capped at 1.5 mm
+HEAT (each grid cell: 5 layers through the white; each yolk: 8 layers through its centre)
+Conduction:               ρc ∂T/∂t = k ∂²T/∂z²   (implicit, per column)
+Pan → white:              contact conductance 200 W/m²K (through the oil film)
+Top → air:                18 W/m²K (convection + radiation) to air warmed by the pan: T_air + 0.15·(T_pan − T_air)
+Evaporation from the top: q = h_m·L_v·(ρ_v,sat(T) − RH·ρ_v,sat(T_room)),  h_m = h_conv/(ρ_air c_p,air·0.9)
+                          (heat–mass transfer analogy; Magnus formula for vapour pressure; RH 50 %)
+Water:                    no layer above 100 °C (extra heat boils water off)
+Pan:                      C·dT/dt = G_hob·(T_element − T) − G_loss·(T − T_room) − (heat into the eggs)
+                          C = 1200 J/K, G_hob = 15 W/K, G_loss = 3 W/K; the element level holds an empty pan
+                          at the chosen temperature, so cold eggs pull the pan down and it recovers over ~1 min
+Setting (first order, 4 s): white 0 → ½ over 60–65 °C, ½ → 1 over 65–80 °C
+                          yolk  0 → ½ over 64–68 °C, ½ → 1 over 68–72 °C
+Browning:                 thin (< 3.5 mm), set white browns at a rate ∝ (T_pan − 140 °C)
+Start:                    eggs go into a preheated pan
+Haugh unit:               HU = 100·log₁₀(h_mm − 1.7·W^0.37 + 7.6)</span>
+    <p>The grid is 128 × 128 cells over 30 cm (2.3 mm cells), solved semi-implicitly with a conjugate-gradient solver. Volume (white on the surface plus the films on the yolks) is conserved to better than 0.001 %. Once nothing has moved for a second, the flow solve is skipped and only re-checked every 0.5 s, which is what makes 10–30× playback possible for cooking.</p>
+
+    <h3>Values used</h3>
+    <table>
+      <tr><th>Property</th><th>Default</th><th>Basis</th></tr>
+      <tr><td>Egg white density</td><td>1040 kg/m³</td><td><span class="tag m">measured</span> Thick white 1.046 g/cm³ [5]; whole egg contents 1.031 g/cm³ [4]. One study lists hen white at 1134 kg/m³ [1] — an outlier, not used.</td></tr>
+      <tr><td>Yolk density</td><td>1030 kg/m³</td><td><span class="tag m">measured</span> 1027 [1] to 1034 kg/m³ [5]</td></tr>
+      <tr><td>Thin white viscosity</td><td>0.012 Pa·s</td><td><span class="tag m">measured</span> Liquid egg white 0.0116 Pa·s at 25 °C [3]</td></tr>
+      <tr><td>Thick white viscosity</td><td>2 Pa·s</td><td><span class="tag m">measured</span> Whole white ≈2000× water at 1 s⁻¹; power-law n = 0.31, k = 2.1 Pa·sⁿ [2]</td></tr>
+      <tr><td>Yolk viscosity</td><td>1.0 Pa·s</td><td><span class="tag m">measured</span> 0.51 Pa·s at 25 °C falling to 0.12 Pa·s at 60 °C [3]; Herschel–Bulkley K = 1.5, n = 0.90 [1]. The temperature trend from [3] scales the slider value.</td></tr>
+      <tr><td>Thick white yield stress</td><td>12 Pa</td><td><span class="tag c">calibrated</span> Gives ≈5.7 mm thick white and ≈76 HU, in line with measured 5.6–6.3 mm and 73–78 HU [6]. Stirred white measures below 0.8 Pa [2]; the intact gel is much stronger, so this is a model fit.</td></tr>
+      <tr><td>Egg make-up</td><td>58 g; 58 % white, 31 % yolk, 11 % shell</td><td><span class="tag m">measured</span> Average hen egg ≈57 g; 17 % inner thin / 57 % thick / 23 % outer thin white [7]</td></tr>
+      <tr><td>Yolk index</td><td>0.40</td><td><span class="tag m">measured</span> Good egg 0.32–0.40 [8]; farm 0.45, retail ≈0.35 [9]</td></tr>
+      <tr><td>Thermal conductivity / diffusivity</td><td>white 0.52 W/m·K, 1.7×10⁻⁷ m²/s; yolk 0.34 W/m·K, 1.3×10⁻⁷ m²/s</td><td><span class="tag m">measured</span> Coimbra et al. (2006), as tabulated in [15]</td></tr>
+      <tr><td>Setting temperatures</td><td>white 60–80 °C; yolk 64–72 °C</td><td><span class="tag m">measured</span> White starts to set 62–65 °C (ovotransferrin, 12 % of white); ovalbumin (54 %) at ~80 °C; yolk thickens ~65 °C, sets ~70 °C [14]. The smooth ramps between these points are assumed.</td></tr>
+      <tr><td>Hob 1–6 → pan °C</td><td>100 / 125 / 150 / 175 / 200 / 230</td><td><span class="tag a">approximate</span> Manuals: 1 = low, 2–5 = medium, 6 = high, depends on pan [11]. Mapped onto published low/medium/high pan ranges of roughly 93–135 / 135–180 / 180–230 °C [12] (a general cooking-guide source, not a standard). A pale, tender fried egg needs a pan of about 120 °C [13].</td></tr>
+      <tr><td>Pan → egg contact</td><td>200 W/m²K</td><td><span class="tag c">calibrated</span> Chosen so hob 3 (≈150 °C) sets the white in ≈3 min, matching recipe times for an uncovered sunny-side-up egg: 3–4 min at medium [16], 2–3 min at medium-low [17]</td></tr>
+      <tr><td>Air loss, warm air over the pan, humidity, pan heat capacity and coupling, setting time, browning onset</td><td>18 W/m²K; 0.15; 50 %; 1200 J/K, 15 &amp; 3 W/K; 4 s; 140 °C</td><td><span class="tag a">assumed</span> Engineering estimates; no egg-specific source found</td></tr>
+      <tr><td>Film cap over the yolk</td><td>1.5 mm</td><td><span class="tag a">assumed</span></td></tr>
+      <tr><td>Surface tension / contact angle</td><td>0.050 N/m; plate 60°, oiled non-stick pan 70°, glass 35°</td><td><span class="tag a">assumed</span></td></tr>
+    </table>
+
+    <h3>Limits — read before relying on numbers</h3>
+    <ul>
+      <li>Thin-film theory is approximate for the first ~0.1 s while the egg is still tall.</li>
+      <li>Each white uses one "average" viscosity plus a yield stress; real white is shear-thinning and slightly elastic.</li>
+      <li>Heat only flows up and down within each cell, not sideways, and moving white carries its heat with it. Hot oil spitting onto the top is not modelled, so at high heat real eggs may set on top a little sooner than shown.</li>
+      <li>The evaporation formula is the standard dilute-vapour analogy; near 100 °C (a boiling surface) it is only approximate. Water lost by evaporation is not removed from the white's volume.</li>
+      <li>The pan is one lumped temperature: the patch under each egg cools no more than the rest of the pan, which slightly understates the local dip.</li>
+      <li>The yolk is heated through one column at its centre; its sides are not modelled separately. There is no lid or basting, so the film on top of the yolk stays raw.</li>
+      <li>Browning is an empirical rate, not chemistry. Set times in the hob table come from this model, tuned against recipe times (which vary by cook and pan), not lab measurements.</li>
+      <li>Theory items (lubrication flow, Bingham films, Lamb damping, capillary puddle height, 1-D conduction) are standard textbook results and were not re-checked against sources in this build.</li>
+    </ul>
+
+    <h3>Sources</h3>
+    <ol style="font-size:12.5px">
+      <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC4456492" target="_blank" rel="noopener">Kumbár et al. — rheology and density of liquid egg products (J. Biol. Phys.)</a></li>
+      <li><a href="https://arxiv.org/pdf/2202.10243" target="_blank" rel="noopener">Egg-speriments: Stretch, crack, and spin (arXiv 2202.10243)</a></li>
+      <li><a href="https://physics.info/viscosity/problems.shtml" target="_blank" rel="noopener">physics.info — viscosity of liquid egg white and yolk vs temperature</a></li>
+      <li><a href="https://link.springer.com/doi/10.1007/BF01649755" target="_blank" rel="noopener">Rahn &amp; Paganelli — density of egg contents 1.031 g/cm³</a></li>
+      <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC7846588/table/Tab3" target="_blank" rel="noopener">PMC7846588 Table 3 — thick/thin white, densities, Haugh units</a></li>
+      <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC8704446/table/tbl0003" target="_blank" rel="noopener">PMC8704446 Table 3 — egg weight, albumen height, Haugh unit</a></li>
+      <li><a href="https://cec.nic.in/webpath/curriculum/Module/FDTECH/Paper01/17/downloads/script.pdf" target="_blank" rel="noopener">CEC food technology module — egg composition and albumen layers</a></li>
+      <li><a href="https://cec.nic.in/webpath/curriculum/Module/FDTECH1/Paper12/8/downloads/faq.pdf" target="_blank" rel="noopener">CEC FAQ — yolk index of a good egg</a></li>
+      <li><a href="https://jurnal.usk.ac.id/JMV/article/download/22189/pdf" target="_blank" rel="noopener">Novita et al. — Haugh unit and yolk index at farm, distributor, retail</a></li>
+      <li><a href="https://en.wikipedia.org/wiki/Haugh_unit" target="_blank" rel="noopener">Haugh unit — formula and USDA grades (AA ≥ 72, A 60–71, B 31–59)</a></li>
+      <li><a href="https://auto.manualsonline.com/manuals/mfg/indesit/i6.html?p=8" target="_blank" rel="noopener">Indesit hob manual — settings 1 low, 2–5 medium, 6 high</a></li>
+      <li><a href="https://pekis.net/node/1029" target="_blank" rel="noopener">Pan temperature guide — low 93–135, medium 135–180, high 180–230 °C</a></li>
+      <li><a href="https://app.ckbk.com/reference/food00011c02s001e005se002se003/fried-eggs" target="_blank" rel="noopener">ckbk reference — fried eggs: pan around 120 °C for a pale, tender egg</a></li>
+      <li><a href="https://www.slaw.ca/?p=1762" target="_blank" rel="noopener">Egg coagulation temperatures (khymos.org, via Slaw) — white 62–65 °C, ovalbumin 80 °C, yolk 65–70 °C</a></li>
+      <li><a href="https://arxiv.org/pdf/2606.22156" target="_blank" rel="noopener">How to Cook a Soft-Boiled Egg Optimally (arXiv 2606.22156) — Table 1 thermal properties</a></li>
+      <li><a href="https://www.tastingtable.com/1955873/how-to-fry-egg/" target="_blank" rel="noopener">Tasting Table — sunny-side up at medium heat: 3–4 min until the white is completely set</a></li>
+      <li><a href="https://www.egginfo.co.uk/ways-to-cook/fried/cooking-tips/how-cook-eggs-sunny-side" target="_blank" rel="noopener">British Lion eggs (egginfo.co.uk) — sunny side up at medium-low: whites set in about 2–3 min</a></li>
+      <li><a href="https://www.tastingtable.com/2180072/fried-egg-tip-use-lid/" target="_blank" rel="noopener">Tasting Table — why a lid helps: heat from below overcooks the bottom before the top catches up</a></li>
+    </ol>
+  </div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// EggSim v3 — thin-film model of up to 4 raw eggs spreading (and cooking) on a surface.
+// Units: SI throughout (m, kg, s, Pa, °C).
+//
+// FLOW. All egg white shares one height field h(x,y), so whites from different eggs merge.
+//   q = -K ∇P,  P = h + s   (s = weight of the yolks as extra head of white)
+//   thick white: Bingham layer  Y = h - τy/(ρ g |∇P|),  K = ρ g Y²(3h - Y)/(6μ)
+//   thin white : Newtonian film K = ρ g h³/(3μ), carried along by moving thick white
+//   inertial cap: speed ≤ Fr·√(g h);  capillary edge: dry cell wets only if edge deeper than h_eq
+//   cooked (set) white no longer flows: only the unset share of the column is mobile.
+// YOLKS. Membrane-bound drops; shape = damped oscillator toward the yolk index (Lamb damping),
+//   drift with the white around them, push each other apart on contact, film of thick white on top.
+// HEAT. Each wet cell holds NZ layers through the white; implicit 1-D conduction:
+//   pan → contact conductance → white layers → air on top (or insulated under a yolk).
+//   Water caps the white at 100 °C. Protein setting: white 60→80 °C, yolk 64→72 °C (first-order).
+//   Thin, set edges brown when the pan is above the browning onset.
+// ---------------------------------------------------------------------------
+class EggSim {
+  constructor(params = {}) {
+    this.N = params.N || 128;
+    this.L = params.L || 0.30;
+    this.dx = this.L / this.N;
+    this.NZ = 5; this.NZY = 8;
+    const n = this.N * this.N, NZ = this.NZ;
+    const F = () => new Float64Array(n);
+    this.h = F(); this.m = F(); this.c = F(); this.s = F();
+    this.aE = F(); this.aN = F(); this.aNE = F(); this.aNW = F();
+    this.fE = F(); this.fN = F(); this.fNE = F(); this.fNW = F();
+    this.diag = F(); this.b = F(); this.r = F(); this.z = F(); this.p = F(); this.Ap = F();
+    this.pinF = F(); this.Dn = F();
+    this.ux = new Float32Array(n); this.uz = new Float32Array(n);
+    this.mask = new Uint8Array(n);
+    this.T = new Float32Array(n * NZ); this.Pz = new Float32Array(n * NZ);
+    this.phiBar = new Float32Array(n); this.phiMax = new Float32Array(n); this.brown = new Float32Array(n);
+    this.inV = F(); this.inT = new Float64Array(n * NZ); this.inP = new Float64Array(n * NZ);
+    this.tri = { a: new Float64Array(16), b: new Float64Array(16), c: new Float64Array(16), d: new Float64Array(16) };
+    this.p0 = Object.assign({
+      g: 9.81,
+      eggMass: 58, whiteFrac: 0.58, yolkFrac: 0.31,
+      thickFrac: 0.57,
+      rhoW: 1040, rhoY: 1030,
+      muThin: 0.012, muThick: 2.0, muYolk: 1.0,
+      tauThick: 12.0,
+      gamma: 0.050, theta: 60,
+      yolkIndex: 0.40,
+      Fr: 1.0,
+      coatMax: 0.0015,
+      pinNoise: 0.02,
+      seed: 0,
+      wallR: 0,            // m; >0 = round pan wall
+      // heat
+      panSet: 20,          // °C target pan temperature (20 = off)
+      Tair: 20, Tegg: 20,
+      kW: 0.52, alphaW: 1.7e-7, kY: 0.34, alphaY: 1.3e-7,
+      hContact: 200,       // W/m²K pan → white (through oil), assumed; sets medium heat ≈ 3 min (recipe benchmark)
+      hAir: 18,            // W/m²K top surface → air: convection ~10 + radiation ~8, assumed
+      hConv: 10,           // W/m²K convective part (drives evaporation by heat–mass analogy), assumed
+      rh: 0.5,             // room relative humidity, assumed
+      airWarm: 0.15,       // air just above the egg is warmed by the pan: Tair + airWarm·(Tpan − Tair), assumed
+      panC: 1200,          // J/K heat capacity of pan (+ hob plate), assumed
+      panGhob: 15,         // W/K hob → pan coupling (element far hotter than pan), assumed
+      panGloss: 3,         // W/K pan → room losses, assumed
+      tauSet: 4,           // s, protein setting time constant, assumed
+      brownOnset: 140,     // °C pan temperature where thin set edges start to brown, assumed
+    }, params);
+    this.eggs = [];
+    this.reset([]);
+  }
+
+  // ---------------------------------------------------------------- set-up
+  setWall(r) { this.p0.wallR = r; this.buildMask(); }
+  buildMask() {
+    const N = this.N, dx = this.dx, R = this.p0.wallR;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const x = (i + 0.5) * dx - this.L / 2, y = (j + 0.5) * dx - this.L / 2;
+      this.mask[j * N + i] = (i > 0 && j > 0 && i < N - 1 && j < N - 1 && (!(R > 0) || x * x + y * y < R * R)) ? 1 : 0;
+    }
+  }
+
+  reset(layout) {
+    const p = this.p0;
+    this.h.fill(0); this.m.fill(0); this.c.fill(0); this.s.fill(0);
+    this.T.fill(p.Tair); this.Pz.fill(0); this.phiBar.fill(0); this.phiMax.fill(0); this.brown.fill(0);
+    this.ux.fill(0); this.uz.fill(0);
+    this.t = 0; this.steps = 0; this.lastIters = 0; this.uMax = 0; this.uMaxAll = 0;
+    this.eggs = []; this.VwTot = 0; this.thickTot = 0;
+    this.Tpan = p.panSet;              // eggs go into a preheated pan
+    this.frozen = false; this.lastFlow = -1; this.calm = 0;
+    this.buildMask();
+    this.makePinNoise(p.seed || ((Math.random() * 2 ** 31) | 0));
+    this.i0 = 0; this.i1 = -1; this.j0 = 0; this.j1 = -1;
+    for (const e of (layout || [])) this.addEgg(e.x, e.z, e.ang);
+    this.dtNext = 1e-3;
+  }
+
+  makePinNoise(seed) {
+    const N = this.N, a = this.p0.pinNoise;
+    let st = seed >>> 0;
+    const rnd = () => ((st = (st * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1;
+    const oct = (cell) => {
+      const G = Math.ceil(N / cell) + 2, g = new Float64Array(G * G);
+      for (let k = 0; k < g.length; k++) g[k] = rnd();
+      const out = new Float64Array(N * N);
+      for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+        const fx = i / cell, fy = j / cell, x0 = Math.floor(fx), y0 = Math.floor(fy);
+        let u = fx - x0, v = fy - y0; u = u * u * (3 - 2 * u); v = v * v * (3 - 2 * v);
+        const q = (x, y) => g[y * G + x];
+        out[j * N + i] = (q(x0, y0) * (1 - u) + q(x0 + 1, y0) * u) * (1 - v) + (q(x0, y0 + 1) * (1 - u) + q(x0 + 1, y0 + 1) * u) * v;
+      }
+      return out;
+    };
+    const o1 = oct(11), o2 = oct(5);
+    for (let k = 0; k < N * N; k++) this.pinF[k] = 1 + a * (0.75 * o1[k] + 0.25 * o2[k]);
+  }
+
+  // place one egg (shell removed instantly) centred at (x, z) with its long axis at angle ang
+  addEgg(x, z, ang = 0) {
+    if (this.eggs.length >= 4) return null;
+    const p = this.p0, N = this.N, dx = this.dx, NZ = this.NZ;
+    const mW = p.eggMass * p.whiteFrac / 1000, mY = p.eggMass * p.yolkFrac / 1000;
+    const Vw = mW / p.rhoW, Vy = mY / p.rhoY, Vc = Vw + Vy;
+    const kk = 0.12, si = 0.76;
+    const sc = Math.cbrt(Vc / (Math.PI * si * si * (4 / 3 + 4 * kk * kk / 15)));
+    const a = sc, bb = si * sc;
+    const rOf = (u) => { const q = u / a; return Math.abs(q) >= 1 ? 0 : bb * Math.sqrt(1 - q * q) * (1 + kk * q); };
+    const Ry0 = Math.cbrt(3 * Vy / (4 * Math.PI));
+    const xy = 0.15 * a, ca = Math.cos(ang), sa = Math.sin(ang);
+    const thin = 1 - p.thickFrac, inner = thin * 17 / 40;
+    const Ri = Math.cbrt(3 * (Vy + inner * Vw) / (4 * Math.PI));
+    const lam = Math.cbrt((Vy + (inner + p.thickFrac) * Vw) / Vc);
+    const yolk = {
+      x: x + ca * xy, z: z + sa * xy, k: 1.0, kd: 0, vx: 0, vz: 0,
+      Ry0, Vy, Vw, thickFrac: p.thickFrac, tCrack: this.t,
+      Ty: new Float32Array(this.NZY).fill(p.Tegg), Py: new Float32Array(this.NZY), filmP: 0, filmT: p.Tegg,
+    };
+    this.updateYolkGeom(yolk);
+    // column of white for this egg
+    const NS = 24, cells = [];
+    let sum = 0;
+    const R = a + 2 * dx;
+    const i0 = Math.max(1, Math.floor((x - R + this.L / 2) / dx)), i1 = Math.min(N - 2, Math.ceil((x + R + this.L / 2) / dx));
+    const j0 = Math.max(1, Math.floor((z - R + this.L / 2) / dx)), j1 = Math.min(N - 2, Math.ceil((z + R + this.L / 2) / dx));
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      if (!this.mask[id]) continue;
+      const X = (i + 0.5) * dx - this.L / 2 - x, Z = (j + 0.5) * dx - this.L / 2 - z;
+      const lx = X * ca + Z * sa, ly = -X * sa + Z * ca;
+      const r = rOf(lx);
+      if (r <= Math.abs(ly)) continue;
+      const zt = Math.sqrt(r * r - ly * ly);
+      let nA = 0, nT = 0;
+      for (let k = 0; k < NS; k++) {
+        const zz = -zt + (k + 0.5) / NS * 2 * zt;
+        const d2 = (lx - xy) * (lx - xy) + ly * ly + zz * zz;
+        if (d2 < Ry0 * Ry0) continue;
+        nA++;
+        if (d2 < Ri * Ri) continue;
+        const rl = lam * rOf(lx / lam);
+        if (ly * ly + zz * zz < rl * rl) nT++;
+      }
+      const col = 2 * zt * nA / NS;
+      if (col <= 0) continue;
+      cells.push(id, col, nA ? nT / nA : 0);
+      sum += col;
+    }
+    if (sum <= 0) return null;
+    const scale = (Vw - yolk.Vcoat) / (sum * dx * dx);
+    for (let q = 0; q < cells.length; q += 3) {
+      const id = cells[q], dh = cells[q + 1] * scale, cf = cells[q + 2];
+      const ho = this.h[id], hn = ho + dh;
+      for (let k = 0; k < NZ; k++) {
+        const kk2 = id * NZ + k;
+        this.T[kk2] = ho > 1e-9 ? (this.T[kk2] * ho + p.Tegg * dh) / hn : p.Tegg;
+        this.Pz[kk2] = ho > 1e-9 ? this.Pz[kk2] * ho / hn : 0;
+      }
+      this.m[id] += dh * cf;
+      this.h[id] = hn;
+    }
+    this.eggs.push(yolk);
+    this.VwTot += Vw; this.thickTot += p.thickFrac * Vw;
+    this.updateC();
+    this.computeOverburden();
+    this.computeBox();
+    this.frozen = false; this.calm = 0;
+    this.dtNext = 1e-3;
+    return yolk;
+  }
+
+  updateC() {
+    const n = this.N * this.N;
+    for (let id = 0; id < n; id++) {
+      const hh = this.h[id];
+      this.c[id] = hh > 1e-9 ? Math.min(1, Math.max(0, this.m[id] / hh)) : 0;
+    }
+  }
+
+  // ---------------------------------------------------------------- yolks
+  updateYolkGeom(y) {
+    y.ya = Math.cbrt(3 * y.Vy / (4 * Math.PI * y.k));
+    y.yH = 2 * y.k * y.ya;
+    this.updateCoat(y);
+  }
+  // film of thick white on a yolk: t = τy / (ρ g sin α), capped (phi: 0 top, π/2 rim)
+  coatNormal(y, phi) {
+    const p = this.p0, a = y.ya, H = y.yH;
+    if (!(p.tauThick > 0)) return 0;
+    const sp = Math.sin(phi), cp = Math.cos(phi);
+    const sinA = H * sp / Math.sqrt(a * a * cp * cp + H * H * sp * sp);
+    return Math.min(p.coatMax, p.tauThick / (p.rhoW * p.g * Math.max(1e-6, sinA)));
+  }
+  updateCoat(y) {
+    const a = y.ya, H = y.yH, n = 48, dphi = Math.PI / 2 / n;
+    let V = 0;
+    for (let k = 0; k < n; k++) {
+      const phi = (k + 0.5) * dphi, sp = Math.sin(phi), cp = Math.cos(phi);
+      V += this.coatNormal(y, phi) * 2 * Math.PI * a * sp * Math.sqrt(a * a * cp * cp + H * H * sp * sp) * dphi;
+    }
+    y.Vcoat = Math.min(V, 0.5 * y.thickFrac * y.Vw);
+  }
+  get Vcoat() { let v = 0; for (const y of this.eggs) v += y.Vcoat; return v; }
+  thickTarget() { return Math.max(0, this.thickTot - this.Vcoat); }
+
+  yolkSet(y) { let s = 0; for (let k = 0; k < this.NZY; k++) s += y.Py[k]; return s / this.NZY; }
+  yolkMeanT(y) { let s = 0; for (let k = 0; k < this.NZY; k++) s += y.Ty[k]; return s / this.NZY; }
+
+  // measured yolk viscosity falls with temperature (0.506 Pa·s at 25 °C → 0.121 at 60 °C); scale the user value
+  yolkMu(y) {
+    const T = this.yolkMeanT(y);
+    const tab = [[25, 0.506], [50, 0.139], [55, 0.127], [60, 0.121]];
+    let v = tab[0][1];
+    if (T >= 60) v = tab[3][1];
+    else for (let q = 0; q < 3; q++) if (T >= tab[q][0] && T <= tab[q + 1][0]) { const f = (T - tab[q][0]) / (tab[q + 1][0] - tab[q][0]); v = tab[q][1] + f * (tab[q + 1][1] - tab[q][1]); }
+    return this.p0.muYolk * v / 0.506;
+  }
+
+  stepYolks(dt) {
+    const p = this.p0, N = this.N, dx = this.dx;
+    for (const y of this.eggs) {
+      const set = this.yolkSet(y);
+      const R = y.Ry0, nu = this.yolkMu(y) / p.rhoY;
+      const beta = 5 * nu / (R * R), w0 = Math.sqrt(p.g / R);
+      let tleft = dt;
+      if (set < 0.5) {
+        while (tleft > 1e-12) {
+          const d = Math.min(tleft, 5e-4);
+          y.kd += (-w0 * w0 * (y.k - p.yolkIndex) - 2 * beta * y.kd) * d;
+          y.k += y.kd * d;
+          y.k = Math.min(1.15, Math.max(0.12, y.k));
+          tleft -= d;
+        }
+      } else y.kd = 0;
+      this.updateYolkGeom(y);
+      // drift with the white around it (ring a .. a+8 mm), unless set
+      let sx = 0, sz = 0, sn = 0;
+      const a = y.ya, rr = a + 0.008, ic = (y.x + this.L / 2) / dx - 0.5, jc = (y.z + this.L / 2) / dx - 0.5, rc = Math.ceil(rr / dx) + 1;
+      for (let j = Math.max(0, Math.floor(jc - rc)); j <= Math.min(N - 1, Math.ceil(jc + rc)); j++)
+        for (let i = Math.max(0, Math.floor(ic - rc)); i <= Math.min(N - 1, Math.ceil(ic + rc)); i++) {
+          const X = (i - ic) * dx, Z = (j - jc) * dx, r2 = X * X + Z * Z;
+          if (r2 < a * a || r2 > rr * rr) continue;
+          const id = j * N + i; if (this.h[id] < 2e-4) continue;
+          const ff = 1 - this.phiBar[id];
+          sx += this.ux[id] * ff; sz += this.uz[id] * ff; sn++;
+        }
+      const fr = (1 - set) * 0.7;
+      y.vx = sn ? fr * sx / sn : 0; y.vz = sn ? fr * sz / sn : 0;
+      const sp = Math.hypot(y.vx, y.vz); if (sp > 0.2) { y.vx *= 0.2 / sp; y.vz *= 0.2 / sp; }
+      y.x += y.vx * dt; y.z += y.vz * dt;
+    }
+    // contact between yolks: push apart (membranes don't merge)
+    for (let it = 0; it < 3; it++) for (let A = 0; A < this.eggs.length; A++) for (let B = A + 1; B < this.eggs.length; B++) {
+      const ya = this.eggs[A], yb = this.eggs[B];
+      let dxp = yb.x - ya.x, dzp = yb.z - ya.z, d = Math.hypot(dxp, dzp);
+      const minD = 0.97 * (ya.ya + yb.ya);
+      if (d < minD) {
+        if (d < 1e-6) { dxp = 1; dzp = 0; d = 1e-6; }
+        const push = (minD - d) / 2, nx = dxp / d, nz = dzp / d;
+        const wa = this.yolkSet(ya) > 0.5 ? 0 : 1, wb = this.yolkSet(yb) > 0.5 ? 0 : 1, ws = wa + wb || 1;
+        ya.x -= nx * push * 2 * wa / ws; ya.z -= nz * push * 2 * wa / ws;
+        yb.x += nx * push * 2 * wb / ws; yb.z += nz * push * 2 * wb / ws;
+        this.frozen = false;
+      }
+    }
+    // keep inside the pan wall / domain
+    const lim = this.p0.wallR > 0 ? this.p0.wallR : this.L / 2 - 0.01;
+    for (const y of this.eggs) {
+      const rmax = lim - y.ya - 0.003, r = Math.hypot(y.x, y.z);
+      if (this.p0.wallR > 0) { if (r > rmax && r > 0) { y.x *= rmax / r; y.z *= rmax / r; } }
+      else { y.x = Math.max(-rmax, Math.min(rmax, y.x)); y.z = Math.max(-rmax, Math.min(rmax, y.z)); }
+    }
+  }
+
+  computeOverburden() {
+    const p = this.p0, N = this.N, dx = this.dx;
+    this.s.fill(0);
+    const f = p.rhoY / p.rhoW;
+    for (const y of this.eggs) {
+      const a = y.ya, H = y.yH;
+      const ic = (y.x + this.L / 2) / dx - 0.5, jc = (y.z + this.L / 2) / dx - 0.5, rc = Math.ceil(a / dx) + 1;
+      for (let j = Math.max(0, Math.floor(jc - rc)); j <= Math.min(N - 1, Math.ceil(jc + rc)); j++)
+        for (let i = Math.max(0, Math.floor(ic - rc)); i <= Math.min(N - 1, Math.ceil(ic + rc)); i++) {
+          const X = (i - ic) * dx, Z = (j - jc) * dx, q = 1 - (X * X + Z * Z) / (a * a);
+          if (q > 0) this.s[j * N + i] += f * H * Math.sqrt(q);
+        }
+    }
+  }
+
+  computeBox() {
+    const N = this.N;
+    let i0 = N, i1 = -1, j0 = N, j1 = -1;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const id = j * N + i;
+      if (this.h[id] > 0 || this.s[id] > 0) {
+        if (i < i0) i0 = i; if (i > i1) i1 = i; if (j < j0) j0 = j; if (j > j1) j1 = j;
+      }
+    }
+    if (i1 < 0) { this.i0 = 0; this.i1 = -1; this.j0 = 0; this.j1 = -1; return; }
+    this.i0 = Math.max(0, i0 - 2); this.i1 = Math.min(N - 1, i1 + 2);
+    this.j0 = Math.max(0, j0 - 2); this.j1 = Math.min(N - 1, j1 + 2);
+  }
+
+  // ---------------------------------------------------------------- flow
+  faceK(ia, ib, dist) {
+    const p = this.p0, h = this.h, s = this.s;
+    this.fT = 0;
+    if (!this.mask[ia] || !this.mask[ib]) return 0;
+    const ha = h[ia], hb = h[ib];
+    const Pa = ha + s[ia], Pb = hb + s[ib];
+    const donor = Pa >= Pb ? ia : ib;
+    const hf = h[donor];
+    if (hf < 1e-7) return 0;
+    const S = Math.abs(Pa - Pb) / dist + 1e-9;
+    if (Math.min(ha, hb) < this.hDry) {
+      const recv = donor === ia ? ib : ia;
+      const he = this.hEq * this.pinF[recv];
+      if (hf < he || this.Dn[recv] < he * (4 / 12)) return 0;
+    }
+    // cooked (set) white is solid: only the unset share of the column can move
+    const ff = 1 - this.phiBar[donor];
+    if (ff < 0.03) return 0;
+    const hm = hf * ff;
+    const c = this.c[donor];
+    const rg = p.rhoW * p.g;
+    let Kt = 0;
+    if (c > 0) {
+      const Y = hm - p.tauThick / (rg * S);
+      if (Y > 0) Kt = c * rg * Y * Y * (3 * hm - Y) / (6 * p.muThick);
+    }
+    const h2 = (1 - c) * hm;
+    let Kn = rg * h2 * h2 * h2 / (3 * p.muThin);
+    if (Kt > 0 && c > 0) Kn += 1.5 * Kt * (1 - c) / c;
+    let K = Kt + Kn;
+    if (K <= 0) return 0;
+    const Kcap = p.Fr * Math.sqrt(p.g * hm) * hm / S;
+    if (K > Kcap) { const f = Kcap / K; Kt *= f; K = Kcap; }
+    this.fT = Kt / K;
+    const u = K * S / hf;
+    if (u > this.uMaxAll) this.uMaxAll = u;                       // all faces: limits the time step (keeps fronts round)
+    if (Math.min(ha, hb) >= 0.6 * this.hEq && u > this.uMax) this.uMax = u; // interior only: 'has it stopped?'
+    return K;
+  }
+
+  flowStep(dt) {
+    const N = this.N, dx = this.dx, h = this.h, s = this.s;
+    const { i0, i1, j0, j1 } = this;
+    if (i1 < i0) return;
+    const aE = this.aE, aN = this.aN, aNE = this.aNE, aNW = this.aNW, diag = this.diag, b = this.b, Dn = this.Dn;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      let sAx = 0, sDg = 0;
+      if (i > 0) sAx += h[id - 1]; if (i < N - 1) sAx += h[id + 1];
+      if (j > 0) sAx += h[id - N]; if (j < N - 1) sAx += h[id + N];
+      if (i > 0 && j > 0) sDg += h[id - N - 1]; if (i < N - 1 && j > 0) sDg += h[id - N + 1];
+      if (i > 0 && j < N - 1) sDg += h[id + N - 1]; if (i < N - 1 && j < N - 1) sDg += h[id + N + 1];
+      Dn[id] = (2 * sAx + sDg) / 12;
+    }
+    const wa = dt * (2 / 3) / (dx * dx), wd = dt * (1 / 6) / (dx * dx);
+    const d1 = dx, d2 = dx * Math.SQRT2;
+    this.uMax = 0; this.uMaxAll = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; diag[id] = 1; b[id] = h[id]; }
+    const face = (id, nb, w, dist, arrA, arrF) => {
+      const a = w * this.faceK(id, nb, dist);
+      arrA[id] = a; arrF[id] = this.fT;
+      if (a) { diag[id] += a; diag[nb] += a; const ds = s[nb] - s[id]; b[id] += a * ds; b[nb] -= a * ds; }
+    };
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      if (i < i1) face(id, id + 1, wa, d1, aE, this.fE); else aE[id] = 0;
+      if (j < j1) face(id, id + N, wa, d1, aN, this.fN); else aN[id] = 0;
+      if (i < i1 && j < j1) face(id, id + N + 1, wd, d2, aNE, this.fNE); else aNE[id] = 0;
+      if (i > i0 && j < j1) face(id, id + N - 1, wd, d2, aNW, this.fNW); else aNW[id] = 0;
+    }
+    this.pcg();
+    let sum = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; if (h[id] < 0) h[id] = 0; sum += h[id]; }
+    const target = this.VwTot - this.Vcoat;
+    if (sum > 0) { const sc = target / (sum * dx * dx); for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) h[j * N + i] *= sc; }
+    this.transport(dt);
+  }
+
+  matvec(x, y) {
+    const N = this.N, { i0, i1, j0, j1 } = this;
+    const aE = this.aE, aN = this.aN, aNE = this.aNE, aNW = this.aNW, diag = this.diag;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; y[id] = diag[id] * x[id]; }
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i, xi = x[id];
+      let a = aE[id]; if (a) { y[id] -= a * x[id + 1]; y[id + 1] -= a * xi; }
+      a = aN[id]; if (a) { y[id] -= a * x[id + N]; y[id + N] -= a * xi; }
+      a = aNE[id]; if (a) { y[id] -= a * x[id + N + 1]; y[id + N + 1] -= a * xi; }
+      a = aNW[id]; if (a) { y[id] -= a * x[id + N - 1]; y[id + N - 1] -= a * xi; }
+    }
+  }
+
+  pcg() {
+    const N = this.N, { i0, i1, j0, j1 } = this;
+    const x = this.h, r = this.r, z = this.z, p = this.p, Ap = this.Ap, b = this.b, diag = this.diag;
+    this.matvec(x, Ap);
+    let rz = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      r[id] = b[id] - Ap[id]; z[id] = r[id] / diag[id]; p[id] = z[id]; rz += r[id] * z[id];
+    }
+    const cells = (i1 - i0 + 1) * (j1 - j0 + 1);
+    const tol2 = (4e-9) * (4e-9) * cells;
+    let it = 0;
+    for (; it < 120; it++) {
+      let rr = 0;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; rr += r[id] * r[id]; }
+      if (rr < tol2) break;
+      this.matvec(p, Ap);
+      let pAp = 0;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; pAp += p[id] * Ap[id]; }
+      if (pAp <= 0) break;
+      const alpha = rz / pAp;
+      let rzn = 0;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+        const id = j * N + i;
+        x[id] += alpha * p[id]; r[id] -= alpha * Ap[id]; z[id] = r[id] / diag[id]; rzn += r[id] * z[id];
+      }
+      const beta = rzn / rz; rz = rzn;
+      for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; p[id] = z[id] + beta * p[id]; }
+    }
+    this.lastIters = it;
+  }
+
+  // move thick white, heat and set-state with the same face fluxes the solve used; record velocities
+  transport(dt) {
+    const N = this.N, NZ = this.NZ, dx = this.dx, { i0, i1, j0, j1 } = this, h = this.h, s = this.s, m = this.m;
+    const T = this.T, Pz = this.Pz, inV = this.inV, inT = this.inT, inP = this.inP, ux = this.ux, uz = this.uz;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i; inV[id] = 0; ux[id] = 0; uz[id] = 0;
+      for (let k = 0; k < NZ; k++) { inT[id * NZ + k] = 0; inP[id * NZ + k] = 0; }
+    }
+    const qf = dx / dt, r2 = Math.SQRT1_2;
+    const mv = (ia, ib, a, f, ex, ez) => {
+      const F = a * ((h[ia] + s[ia]) - (h[ib] + s[ib])); // volume/area moved a -> b
+      if (F === 0) return;
+      const dm = F * f; m[ia] -= dm; m[ib] += dm;
+      const d = F > 0 ? ia : ib, rcv = F > 0 ? ib : ia, Fa = Math.abs(F);
+      inV[rcv] += Fa;
+      for (let k = 0; k < NZ; k++) { inT[rcv * NZ + k] += Fa * T[d * NZ + k]; inP[rcv * NZ + k] += Fa * Pz[d * NZ + k]; }
+      const hf = Math.max(h[ia], h[ib], 1e-4), u = F * qf / hf * 0.5;
+      ux[ia] += u * ex; ux[ib] += u * ex; uz[ia] += u * ez; uz[ib] += u * ez;
+    };
+    const aE = this.aE, aN = this.aN, aNE = this.aNE, aNW = this.aNW, fE = this.fE, fN = this.fN, fNE = this.fNE, fNW = this.fNW;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      if (aE[id]) mv(id, id + 1, aE[id], fE[id], 1, 0);
+      if (aN[id]) mv(id, id + N, aN[id], fN[id], 0, 1);
+      if (aNE[id]) mv(id, id + N + 1, aNE[id], fNE[id], r2, r2);
+      if (aNW[id]) mv(id, id + N - 1, aNW[id], fNW[id], -r2, r2);
+    }
+    let sum = 0;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i;
+      if (m[id] < 0) m[id] = 0; if (m[id] > h[id]) m[id] = h[id];
+      sum += m[id];
+      if (inV[id] > 0) {
+        const rem = Math.max(0, h[id] - inV[id]), den = rem + inV[id];
+        for (let k = 0; k < NZ; k++) {
+          const q = id * NZ + k;
+          T[q] = (T[q] * rem + inT[q]) / den; Pz[q] = (Pz[q] * rem + inP[q]) / den;
+        }
+      }
+    }
+    const target = this.thickTarget() / (dx * dx);
+    if (sum > 0) { const sc = target / sum; for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const id = j * N + i; m[id] = Math.min(h[id], m[id] * sc); } }
+    this.updateC();
+  }
+
+  // ---------------------------------------------------------------- heat & cooking
+  static whiteEq(T) { // degree of set of egg white at temperature T (°C)
+    if (T <= 60) return 0;
+    if (T <= 65) { const f = (T - 60) / 5; return 0.5 * f * f * (3 - 2 * f); }
+    if (T <= 80) { const f = (T - 65) / 15; return 0.5 + 0.5 * f * f * (3 - 2 * f); }
+    return 1;
+  }
+  static yolkEq(T) {
+    if (T <= 64) return 0;
+    if (T <= 68) { const f = (T - 64) / 4; return 0.5 * f * f * (3 - 2 * f); }
+    if (T <= 72) { const f = (T - 68) / 4; return 0.5 + 0.5 * f * f * (3 - 2 * f); }
+    return 1;
+  }
+  // evaporative heat loss from a wet surface at T (W/m²): h_m·L_v·(ρv,sat(T) − RH·ρv,sat(Tair)),
+  // h_m from the heat–mass transfer analogy (Le^(2/3) ≈ 0.9), Magnus formula for vapour pressure
+  buildEvap() {
+    const p = this.p0, hm = p.hConv / (1.2 * 1005 * 0.9), Lv = 2.33e6;
+    const rhoSat = (T) => 610.94 * Math.exp(17.625 * T / (T + 243.04)) * 0.018015 / (8.314 * (T + 273.15));
+    const amb = p.rh * rhoSat(p.Tair);
+    this.evapT = new Float64Array(102);
+    for (let T = 0; T <= 101; T++) this.evapT[T] = Math.max(0, hm * Lv * (rhoSat(T) - amb));
+    this.evapKey = `${p.hConv}|${p.rh}|${p.Tair}`;
+  }
+  evap(T) { const t = Math.max(0, Math.min(100.999, T)), i = Math.floor(t), f = t - i; return this.evapT[i] * (1 - f) + this.evapT[i + 1] * f; }
+  evapSlope(T) { const t = Math.max(0, Math.min(100, T)), i = Math.min(100, Math.floor(t)); return this.evapT[i + 1] - this.evapT[i]; }
+
+  // implicit 1-D conduction through n layers; returns into Tarr[off .. off+n). wet: evaporate from the top.
+  solveColumn(Tarr, off, n, dz, k, rc, Gb, Tb, Gt, Tt, dt, wet) {
+    const { a, b, c, d } = this.tri, G = k / dz, C = rc * dz;
+    for (let q = 0; q < n; q++) {
+      const lo = q === 0 ? Gb : G, hi = q === n - 1 ? Gt : G;
+      a[q] = q === 0 ? 0 : -dt * G; c[q] = q === n - 1 ? 0 : -dt * G;
+      b[q] = C + dt * (lo + hi);
+      d[q] = C * Tarr[off + q] + (q === 0 ? dt * Gb * Tb : 0) + (q === n - 1 ? dt * Gt * Tt : 0);
+    }
+    if (wet) { // linearised evaporation at the top node
+      const T0 = Tarr[off + n - 1], E = this.evap(T0), dE = this.evapSlope(T0);
+      b[n - 1] += dt * dE; d[n - 1] += dt * (dE * T0 - E);
+    }
+    for (let q = 1; q < n; q++) { const w = a[q] / b[q - 1]; b[q] -= w * c[q - 1]; d[q] -= w * d[q - 1]; }
+    Tarr[off + n - 1] = d[n - 1] / b[n - 1];
+    for (let q = n - 2; q >= 0; q--) Tarr[off + q] = (d[q] - c[q] * Tarr[off + q + 1]) / b[q];
+    for (let q = 0; q < n; q++) if (Tarr[off + q] > 100) Tarr[off + q] = 100; // water boils off; no higher
+  }
+
+  heatStep(dt) {
+    const p = this.p0, N = this.N, NZ = this.NZ, { i0, i1, j0, j1 } = this, h = this.h, T = this.T, Pz = this.Pz;
+    // pan energy balance: heat from the hob element − losses − heat drawn by the eggs (last step)
+    const Tel = p.panSet + (p.panGloss / p.panGhob) * (p.panSet - p.Tair); // element level that holds an empty pan at the setting
+    this.Tpan += dt * (p.panGhob * (Tel - this.Tpan) - p.panGloss * (this.Tpan - p.Tair) - (this.Qegg || 0)) / p.panC;
+    const hot = this.Tpan > p.Tair + 0.5 || this.anyWarm;
+    this.Qegg = 0;
+    if (!hot) return;
+    if (!this.evapT || this.evapKey !== `${p.hConv}|${p.rh}|${p.Tair}`) this.buildEvap();
+    const Ta = p.Tair + p.airWarm * Math.max(0, this.Tpan - p.Tair);
+    let Q = 0;
+    const rcW = p.kW / p.alphaW, kSet = 1 - Math.exp(-dt / p.tauSet);
+    let anyWarm = false;
+    for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+      const id = j * N + i, hh = h[id];
+      if (hh < 2e-5 || !this.mask[id]) continue;
+      const dz = hh / NZ;
+      const Gb = 1 / (1 / p.hContact + 0.5 * dz / p.kW);
+      const under = this.s[id] > 0;
+      const Gt = under ? 0 : 1 / (1 / p.hAir + 0.5 * dz / p.kW);
+      this.solveColumn(T, id * NZ, NZ, dz, p.kW, rcW, Gb, this.Tpan, Gt, Ta, dt, !under);
+      Q += Gb * (this.Tpan - T[id * NZ]);
+      let ps = 0, pm = 0;
+      for (let k = 0; k < NZ; k++) {
+        const q = id * NZ + k, Tk = T[q];
+        if (Tk > p.Tair + 1) anyWarm = true;
+        const eq = EggSim.whiteEq(Tk);
+        if (eq > Pz[q]) Pz[q] += (eq - Pz[q]) * kSet;
+        ps += Pz[q]; if (Pz[q] > pm) pm = Pz[q];
+      }
+      this.phiBar[id] = ps / NZ; this.phiMax[id] = pm;
+      // thin, set edges brown when the pan is hot enough (empirical rate)
+      if (this.Tpan > p.brownOnset && ps / NZ > 0.5) {
+        // the outer rim (next to dry pan) browns first; thinner white browns faster
+        const edge = (i > 0 && h[id - 1] < 2e-5) || (i < N - 1 && h[id + 1] < 2e-5) || (j > 0 && h[id - N] < 2e-5) || (j < N - 1 && h[id + N] < 2e-5);
+        const thin = edge ? 1 : Math.min(1, Math.max(0, (0.0045 - hh) / 0.003));
+        if (thin > 0) this.brown[id] = Math.min(1, this.brown[id] + dt * thin * (this.Tpan - p.brownOnset) / 3600);
+      }
+    }
+    // yolks: column through the yolk centre, heated from the white beneath
+    const rcY = p.kY / p.alphaY;
+    for (const y of this.eggs) {
+      const NZY = this.NZY, dz = y.yH / NZY;
+      const ic = Math.max(0, Math.min(N - 1, Math.round((y.x + this.L / 2) / this.dx - 0.5)));
+      const jc = Math.max(0, Math.min(N - 1, Math.round((y.z + this.L / 2) / this.dx - 0.5)));
+      const idc = jc * N + ic;
+      const Tb = h[idc] > 2e-5 ? T[idc * NZ + NZ - 1] : this.Tpan;
+      const Gb = h[idc] > 2e-5 ? 1 / (0.5 * dz / p.kY + 0.5 * (h[idc] / NZ) / p.kW) : 1 / (1 / p.hContact + 0.5 * dz / p.kY);
+      const Gt = 1 / (1 / p.hAir + 0.5 * dz / p.kY);
+      this.solveColumn(y.Ty, 0, NZY, dz, p.kY, rcY, Gb, Tb, Gt, Ta, dt, true);
+      for (let k = 0; k < NZY; k++) {
+        if (y.Ty[k] > p.Tair + 1) anyWarm = true;
+        const eq = EggSim.yolkEq(y.Ty[k]);
+        if (eq > y.Py[k]) y.Py[k] += (eq - y.Py[k]) * kSet;
+      }
+      y.filmT = y.Ty[NZY - 1];
+      const fe = EggSim.whiteEq(y.filmT);
+      if (fe > y.filmP) y.filmP += (fe - y.filmP) * kSet;
+    }
+    this.anyWarm = anyWarm;
+    this.Qegg = Q * this.dx * this.dx;
+  }
+
+  // ---------------------------------------------------------------- time stepping
+  step(dt) {
+    const p = this.p0;
+    this.lc = Math.sqrt(p.gamma / (p.rhoW * p.g));
+    this.hEq = 2 * this.lc * Math.sin(p.theta * Math.PI / 360);
+    this.hDry = 2e-5;
+    this.stepYolks(dt);
+    this.computeOverburden();
+    this.computeBox();
+    // skip the flow solve while nothing moves (re-checked every 0.5 s of sim time)
+    let ran = false;
+    if (!this.frozen || this.t - this.lastFlow > 0.5) {
+      this.flowStep(dt); ran = true; this.lastFlow = this.t;
+      let ymove = 0; for (const y of this.eggs) ymove = Math.max(ymove, Math.hypot(y.vx, y.vz), Math.abs(y.kd) * y.ya);
+      if (this.uMax < 2e-5 && ymove < 2e-5) this.calm += dt; else this.calm = 0;
+      this.frozen = this.calm > 1.0;
+    }
+    this.heatStep(dt);
+    this.t += dt; this.steps++;
+    const cfl = this.uMaxAll > 0 ? 0.5 * this.dx / this.uMaxAll : 0.25;
+    this.dtNext = this.frozen ? 0.25 : Math.min(0.25, Math.max(2e-4, cfl));
+    if (this.t < 0.6 && this.eggs.length) this.dtNext = Math.min(this.dtNext, 0.02);
+  }
+  unfreeze() { this.frozen = false; this.calm = 0; }
+
+  advance(simDt, budgetMs = 12, now = () => performance.now()) {
+    const t0 = now();
+    let done = 0;
+    while (done < simDt - 1e-9) {
+      const dt = Math.min(this.dtNext, simDt - done);
+      this.step(dt);
+      done += dt;
+      if (now() - t0 > budgetMs) break;
+    }
+    return done;
+  }
+
+  // ---------------------------------------------------------------- diagnostics
+  hAt(x, y) {
+    const N = this.N, dx = this.dx;
+    const fi = (x + this.L / 2) / dx - 0.5, fj = (y + this.L / 2) / dx - 0.5;
+    const i = Math.max(0, Math.min(N - 2, Math.floor(fi))), j = Math.max(0, Math.min(N - 2, Math.floor(fj)));
+    const u = Math.min(1, Math.max(0, fi - i)), v = Math.min(1, Math.max(0, fj - j));
+    const id = j * N + i, h = this.h;
+    return (1 - u) * (1 - v) * h[id] + u * (1 - v) * h[id + 1] + (1 - u) * v * h[id + N] + u * v * h[id + N + 1];
+  }
+
+  diagnostics() {
+    const p = this.p0, N = this.N, NZ = this.NZ, dx = this.dx;
+    let wet = 0, vol = 0, setVol = 0, topSet = 0, browned = 0, Tsum = 0;
+    for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+      const id = j * N + i, hh = this.h[id];
+      vol += hh;
+      if (hh > 5e-5) {
+        wet++;
+        let sv = 0, ts = 0;
+        for (let k = 0; k < NZ; k++) { if (this.Pz[id * NZ + k] > 0.5) sv++; ts += this.T[id * NZ + k]; }
+        setVol += hh * sv / NZ; Tsum += hh * ts / NZ;
+        if (this.Pz[id * NZ + NZ - 1] > 0.5 || this.s[id] > 0) topSet += this.Pz[id * NZ + NZ - 1] > 0.5 ? 1 : 0;
+        if (this.brown[id] > 0.3) browned++;
+      }
+    }
+    // Haugh-style crest around each yolk (cells under any yolk excluded)
+    const HU = [], hAlb = [];
+    for (const y of this.eggs) {
+      const NA = 24, crest = new Float64Array(NA), r0 = y.ya + 0.002, r1 = y.ya + 0.015;
+      const ic = (y.x + this.L / 2) / dx - 0.5, jc = (y.z + this.L / 2) / dx - 0.5, rc = Math.ceil(r1 / dx) + 1;
+      for (let j = Math.max(0, Math.floor(jc - rc)); j <= Math.min(N - 1, Math.ceil(jc + rc)); j++)
+        for (let i = Math.max(0, Math.floor(ic - rc)); i <= Math.min(N - 1, Math.ceil(ic + rc)); i++) {
+          const id = j * N + i; if (this.s[id] > 0) continue;
+          const X = (i - ic) * dx, Z = (j - jc) * dx, r = Math.hypot(X, Z);
+          if (r < r0 || r > r1) continue;
+          const k = Math.min(NA - 1, Math.floor((Math.atan2(Z, X) + Math.PI) / (2 * Math.PI) * NA));
+          if (this.h[id] > crest[k]) crest[k] = this.h[id];
+        }
+      let cs = 0, cn = 0; for (let k = 0; k < NA; k++) if (crest[k] > 0) { cs += crest[k]; cn++; }
+      const ha = cn ? cs / cn : 0, arg = ha * 1000 - 1.7 * Math.pow(p.eggMass, 0.37) + 7.6;
+      hAlb.push(ha); HU.push(arg > 0 ? 100 * Math.log10(arg) : 0);
+    }
+    const area = wet * dx * dx;
+    const ys = this.eggs.map(y => this.yolkSet(y)), yT = this.eggs.map(y => this.yolkMeanT(y));
+    const mean = (a) => a.length ? a.reduce((q, v) => q + v, 0) / a.length : 0;
+    const y0 = this.eggs[0];
+    return {
+      t: this.t, eggs: this.eggs.length,
+      volume: vol * dx * dx + this.Vcoat, Vw: this.VwTot, Vcoat: this.Vcoat,
+      diameter: Math.sqrt(4 * area / Math.PI), area,
+      hAlbumen: mean(hAlb), HU: mean(HU), HUs: HU,
+      yolkIndex: y0 ? y0.k : 0, yolkWidth: y0 ? 2 * y0.ya : 0, yolkHeight: y0 ? y0.yH : 0,
+      coatTop: y0 ? this.coatNormal(y0, 0) : 0, coatSide: y0 ? this.coatNormal(y0, Math.PI / 2) : 0,
+      hEq: this.hEq, lc: this.lc, iters: this.lastIters, dt: this.dtNext,
+      Tpan: this.Tpan, whiteSet: vol > 0 ? setVol / vol : 0, topSet: wet ? topSet / wet : 0,
+      brownFrac: wet ? browned / wet : 0, whiteT: vol > 0 ? Tsum / vol : p.Tair,
+      yolkSet: mean(ys), yolkT: mean(yT), filmSet: mean(this.eggs.map(y => y.filmP)),
+      frozen: this.frozen, Qegg: this.Qegg || 0,
+      yolkMid: mean(this.eggs.map(y => y.Py[this.NZY >> 1])), yolkTop: mean(this.eggs.map(y => y.Py[this.NZY - 1])),
+    };
+  }
+}
+if (typeof module !== 'undefined') module.exports = { EggSim };
+
+</script>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+
+const $ = (id) => document.getElementById(id);
+const isCoarse = matchMedia('(pointer: coarse)').matches || innerWidth < 760;
+
+// ---------------------------------------------------------------- parameters
+const DEFAULTS = {
+  rhoW: 1040, rhoY: 1030, muThin: 0.012, muThick: 2.0, muYolk: 1.0,
+  tauThick: 12, thickFrac: 0.57, yolkIndex: 0.40, eggMass: 58,
+  theta: 60, gamma: 0.050, exag: 1, panSet: 20,
+};
+const PRESETS = {
+  fresh: { tauThick: 28, thickFrac: 0.64, yolkIndex: 0.45 },
+  shop:  { tauThick: 12, thickFrac: 0.57, yolkIndex: 0.40 },
+  old:   { tauThick: 1.5, thickFrac: 0.42, yolkIndex: 0.30 },
+};
+const SURF = { ceramic: { theta: 60 }, ptfe: { theta: 70 }, glass: { theta: 35 } };
+const HOB = [20, 100, 125, 150, 175, 200, 230];
+const PAN_R = 0.125; // m, inside radius of the pan base
+// slider specs: [label, min, max, step, log, fmt, tag, note, live]
+const SPEC = {
+  rhoW:     ['Egg white density ρ', 1000, 1100, 1, false, v => `${v.toFixed(0)} kg/m³`, 'm', 'Heavier white pushes outwards harder.', true],
+  rhoY:     ['Yolk density', 1000, 1100, 1, false, v => `${v.toFixed(0)} kg/m³`, 'm', 'Sets how hard the yolk presses on the white under it.', true],
+  muThin:   ['Thin white viscosity', 0.002, 0.2, 0.001, true, v => `${fmtNum(v)} Pa·s`, 'm', 'Water is 0.001 Pa·s. Controls how fast the runny white escapes.', true],
+  muThick:  ['Thick white viscosity', 0.2, 20, 0.01, true, v => `${fmtNum(v)} Pa·s`, 'm', 'How slowly the gel creeps once it yields.', true],
+  muYolk:   ['Yolk viscosity (at 25 °C)', 0.1, 5, 0.01, true, v => `${fmtNum(v)} Pa·s`, 'm', 'Damps the yolk wobble (lower = more jiggle). Falls as the yolk warms.', true],
+  tauThick: ['Thick white yield stress τy', 0, 40, 0.1, false, v => `${v.toFixed(1)} Pa`, 'c', 'Gel strength. Higher = taller thick white, higher Haugh unit and a thicker film over the yolk.', true],
+  thickFrac:['Thick share of the white', 0.3, 0.75, 0.01, false, v => `${Math.round(v * 100)} %`, 'm', 'Falls as eggs age. Re-cracks the eggs.', false],
+  yolkIndex:['Yolk index target (H/W)', 0.2, 0.6, 0.01, false, v => v.toFixed(2), 'm', 'Set by the yolk membrane; fresh ≈ 0.45, old ≈ 0.3.', true],
+  eggMass:  ['Egg mass (with shell)', 45, 75, 1, false, v => `${v.toFixed(0)} g`, 'm', 'Average hen egg ≈ 57 g. Re-cracks the eggs.', false],
+  theta:    ['Contact angle θ', 15, 120, 1, false, v => `${v.toFixed(0)}°`, 'a', 'How much the surface repels the white. Higher = thicker edge, smaller spread.', true],
+  gamma:    ['Surface tension γ', 0.03, 0.072, 0.001, false, v => `${(v * 1000).toFixed(0)} mN/m`, 'a', 'Sets the capillary edge height with θ.', true],
+  panSet:   ['Pan temperature', 20, 250, 1, false, v => v <= 20.5 ? 'off' : `${v.toFixed(0)} °C  (≈ hob ${nearestHob(v)})`, null, 'Surface temperature of the preheated pan. Changes ramp over about a minute.', true],
+  exag:     ['Vertical exaggeration', 1, 4, 0.1, false, v => `${v.toFixed(1)}×`, null, 'Stretches heights only — for seeing thin layers.', true],
+};
+function fmtNum(v) { return v >= 1 ? v.toFixed(2) : v >= 0.1 ? v.toFixed(3) : v.toFixed(4); }
+function nearestHob(T) { let b = 0, e = 1e9; for (let k = 0; k < HOB.length; k++) { const d = Math.abs(HOB[k] - T); if (d < e) { e = d; b = k; } } return b === 0 ? 'off' : b; }
+
+const state = Object.assign({}, DEFAULTS);
+const sim = new EggSim(Object.assign({ N: 128, L: 0.30 }, simParams()));
+function simParams() { const { exag, ...rest } = state; return rest; }
+function pushParams() { Object.assign(sim.p0, simParams()); sim.unfreeze(); }
+const rndAng = () => Math.random() * Math.PI * 2;
+let layout = [{ x: 0, z: 0, ang: rndAng() }];
+
+// ---------------------------------------------------------------- renderer & scene
+const canvas = $('three');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+renderer.setPixelRatio(Math.min(devicePixelRatio, isCoarse ? 1.5 : 2));
+renderer.setSize(innerWidth, innerHeight, false);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.92;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+const scene = new THREE.Scene();
+const BG = 0x15171c;
+scene.background = new THREE.Color(BG);
+scene.fog = new THREE.Fog(BG, 80, 170);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(renderer), 0.04).texture;
+
+const camera = new THREE.PerspectiveCamera(38, innerWidth / innerHeight, 0.1, 600);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.screenSpacePanning = true;
+controls.maxPolarAngle = Math.PI * 0.495;
+controls.minDistance = 4;
+controls.maxDistance = 160;
+function setView(kind) {
+  const t = new THREE.Vector3(0, 0.4, 0);
+  const d = (isCoarse ? 1.35 : 1.0) * (sim.eggs.length > 1 || sim.p0.wallR > 0 ? 1.45 : 1);
+  if (kind === 'top') camera.position.set(0, 30 * d, 0.001);
+  else if (kind === 'side') camera.position.set(0, 2.2, 28 * d);
+  else camera.position.set(13 * d, 13 * d, 19 * d);
+  controls.target.copy(t);
+  controls.update();
+}
+
+const hemi = new THREE.HemisphereLight(0xdfe8ff, 0x2a2420, 0.35);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff4e6, 2.4);
+sun.position.set(18, 34, 12);
+sun.castShadow = true;
+sun.shadow.mapSize.set(isCoarse ? 1024 : 2048, isCoarse ? 1024 : 2048);
+const sc = sun.shadow.camera; sc.left = -24; sc.right = 38; sc.top = 24; sc.bottom = -24; sc.near = 1; sc.far = 110;
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; sun.shadow.radius = 4;
+scene.add(sun);
+
+// ---------------------------------------------------------------- surface (and hob for the pan)
+const SURF_CM = 70;
+const surfCanvas = document.createElement('canvas');
+surfCanvas.width = surfCanvas.height = 2048;
+const surfTex = new THREE.CanvasTexture(surfCanvas);
+surfTex.colorSpace = THREE.SRGBColorSpace;
+surfTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+const surfMat = new THREE.MeshPhysicalMaterial({ map: surfTex, roughness: 0.35, metalness: 0, clearcoat: 0.5, clearcoatRoughness: 0.2 });
+const surface = new THREE.Mesh(new THREE.PlaneGeometry(SURF_CM, SURF_CM), surfMat);
+surface.rotation.x = -Math.PI / 2;
+surface.receiveShadow = true;
+scene.add(surface);
+const floor = new THREE.Mesh(new THREE.PlaneGeometry(600, 600), new THREE.MeshStandardMaterial({ color: 0x1b1d22, roughness: 0.9 }));
+floor.rotation.x = -Math.PI / 2; floor.position.y = -0.85; floor.receiveShadow = true;
+scene.add(floor);
+
+// ---------------------------------------------------------------- frying pan (only with the non-stick pan)
+// Profile in cm (r, y). The cooking floor is the disc at y = 0 out to R0 (= the simulation's wall);
+// a rounded inside corner turns into a wall flared 20° from vertical, a rolled rim, then the outside
+// wall and a thicker base that sits on the hob at y = -HOB_DROP.
+const HOB_DROP = 0.72;
+const panGroup = new THREE.Group();
+const panFloorCanvas = document.createElement('canvas');
+panFloorCanvas.width = panFloorCanvas.height = 1024;
+const panFloorTex = new THREE.CanvasTexture(panFloorCanvas);
+panFloorTex.colorSpace = THREE.SRGBColorSpace;
+panFloorTex.anisotropy = Math.min(8, renderer.capabilities.getMaxAnisotropy());
+let handleTip = 0;
+{
+  const R0 = PAN_R * 100, H = 4.6, phi = 20 * Math.PI / 180, rc = 0.9, t = 0.32, base = HOB_DROP;
+  const sp = Math.sin(phi), cp = Math.cos(phi);
+  const inner = [], outer = [], lip = [];
+  // inside corner (centre (R0, rc)), from the floor edge up to the wall direction
+  for (let k = 0; k <= 10; k++) { const a = -Math.PI / 2 + (Math.PI / 2 - phi) * k / 10; inner.push(new THREE.Vector2(R0 + rc * Math.cos(a), rc + rc * Math.sin(a))); }
+  const e = inner[inner.length - 1];
+  const rimIn = new THREE.Vector2(e.x + (H - e.y) * Math.tan(phi), H);
+  for (let k = 1; k <= 6; k++) { const f = k / 6; inner.push(new THREE.Vector2(e.x + (rimIn.x - e.x) * f, e.y + (rimIn.y - e.y) * f)); }
+  // rolled rim: half-circle over the top from the inner to the outer face
+  const nrm = new THREE.Vector2(cp, -sp), tg = new THREE.Vector2(sp, cp), rr = 0.24;
+  const c = new THREE.Vector2(rimIn.x + nrm.x * rr, rimIn.y + nrm.y * rr);
+  for (let k = 0; k <= 12; k++) { const q = Math.PI * k / 12; lip.push(new THREE.Vector2(c.x - nrm.x * rr * Math.cos(q) + tg.x * rr * Math.sin(q) * 1.15, c.y - nrm.y * rr * Math.cos(q) + tg.y * rr * Math.sin(q) * 1.15)); }
+  const rimOut = lip[lip.length - 1];
+  // outside wall down to the outside corner (offset of the inner corner by t), then the base
+  const ce = new THREE.Vector2(R0 + (rc + t) * cp, rc - (rc + t) * sp);
+  for (let k = 0; k <= 6; k++) { const f = k / 6; outer.push(new THREE.Vector2(rimOut.x + (ce.x - rimOut.x) * f, rimOut.y + (ce.y - rimOut.y) * f)); }
+  for (let k = 1; k <= 10; k++) { const a = -phi - (Math.PI / 2 - phi) * k / 10; outer.push(new THREE.Vector2(R0 + (rc + t) * Math.cos(a), rc + (rc + t) * Math.sin(a))); }
+  outer.push(new THREE.Vector2(R0 - 0.6, -base + 0.15), new THREE.Vector2(R0 - 0.9, -base), new THREE.Vector2(0.001, -base));
+  const panInside = new THREE.MeshPhysicalMaterial({ color: 0x2b2d32, roughness: 0.42, metalness: 0.15, clearcoat: 0.35, clearcoatRoughness: 0.35, side: THREE.DoubleSide, envMapIntensity: 0.8 });
+  const panOutside = new THREE.MeshPhysicalMaterial({ color: 0x3a3e45, roughness: 0.3, metalness: 0.55, clearcoat: 0.6, clearcoatRoughness: 0.2, side: THREE.DoubleSide });
+  const rimMat = new THREE.MeshStandardMaterial({ color: 0xc4c8ce, roughness: 0.28, metalness: 0.95 });
+  const mk = (pts, mat) => { const m = new THREE.Mesh(new THREE.LatheGeometry(pts, 160), mat); m.castShadow = true; m.receiveShadow = true; panGroup.add(m); return m; };
+  mk(inner, panInside); mk(lip, rimMat); mk(outer, panOutside);
+  // cooking floor
+  const floorDisc = new THREE.Mesh(new THREE.CircleGeometry(R0 + 0.02, 160), new THREE.MeshPhysicalMaterial({ map: panFloorTex, roughness: 0.42, metalness: 0.1, clearcoat: 0.35, clearcoatRoughness: 0.35, envMapIntensity: 0.8 }));
+  floorDisc.rotation.x = -Math.PI / 2; floorDisc.receiveShadow = true;
+  panGroup.add(floorDisc);
+
+  // handle: riveted bracket on the wall → steel neck → bakelite grip, rising at 12°
+  const yA = 2.9, rOutAt = (y) => ce.x + (y - ce.y) * Math.tan(phi);
+  const xA = rOutAt(yA), alpha = 12 * Math.PI / 180, dir = new THREE.Vector3(Math.cos(alpha), Math.sin(alpha), 0);
+  const steel = new THREE.MeshStandardMaterial({ color: 0xa9aeb5, roughness: 0.32, metalness: 0.95 });
+  const bakelite = new THREE.MeshPhysicalMaterial({ color: 0x141518, roughness: 0.45, metalness: 0, clearcoat: 0.3, clearcoatRoughness: 0.4 });
+  // bracket: thin rounded plate flush against the outer wall (tilted with the wall)
+  const bw = 2.8, bh = 2.0, br = 0.6, shp = new THREE.Shape();
+  shp.moveTo(-bw / 2 + br, -bh / 2); shp.lineTo(bw / 2 - br, -bh / 2); shp.quadraticCurveTo(bw / 2, -bh / 2, bw / 2, -bh / 2 + br);
+  shp.lineTo(bw / 2, bh / 2 - br); shp.quadraticCurveTo(bw / 2, bh / 2, bw / 2 - br, bh / 2);
+  shp.lineTo(-bw / 2 + br, bh / 2); shp.quadraticCurveTo(-bw / 2, bh / 2, -bw / 2, bh / 2 - br);
+  shp.lineTo(-bw / 2, -bh / 2 + br); shp.quadraticCurveTo(-bw / 2, -bh / 2, -bw / 2 + br, -bh / 2);
+  const pGeo = new THREE.ExtrudeGeometry(shp, { depth: 0.16, bevelEnabled: true, bevelThickness: 0.05, bevelSize: 0.05, bevelSegments: 2, curveSegments: 8 });
+  pGeo.rotateY(Math.PI / 2);
+  const plate = new THREE.Mesh(pGeo, steel);
+  plate.position.set(xA - 0.04, yA, 0); plate.rotation.z = -phi; plate.castShadow = true;
+  panGroup.add(plate);
+  // rivet heads, outside and inside the pan
+  const rivetGeo = new THREE.SphereGeometry(0.26, 16, 10); rivetGeo.scale(0.55, 1, 1);
+  const rInAt = (y) => e.x + (y - e.y) * Math.tan(phi);
+  for (const z of [-0.85, 0.85]) {
+    const ro = new THREE.Mesh(rivetGeo, steel); ro.position.set(xA + 0.2, yA, z); ro.rotation.z = -phi; panGroup.add(ro);
+    const ri = new THREE.Mesh(rivetGeo, steel); ri.position.set(rInAt(yA) - 0.05, yA, z); ri.rotation.z = -phi; panGroup.add(ri);
+  }
+  // neck from the plate to the grip
+  const neckLen = 3.2;
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.62, neckLen, 20), steel);
+  neck.position.copy(new THREE.Vector3(xA + 0.2, yA, 0).addScaledVector(dir, neckLen / 2));
+  neck.rotation.z = -(Math.PI / 2 - alpha); neck.castShadow = true;
+  panGroup.add(neck);
+  // collar
+  const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.95, 0.95, 0.5, 28), steel);
+  collar.scale.set(0.8, 1, 1.15);
+  collar.position.copy(new THREE.Vector3(xA + 0.2, yA, 0).addScaledVector(dir, neckLen + 0.15));
+  collar.rotation.z = -(Math.PI / 2 - alpha); collar.castShadow = true;
+  panGroup.add(collar);
+  // grip: tapered, oval section (wider than tall), with a hanging hole near the end
+  const gripLen = 17.5, gp = [];
+  for (let k = 0; k <= 24; k++) {
+    const f = k / 24, y = f * gripLen;
+    let r = 0.95 + 0.25 * Math.sin(Math.min(1, f * 1.4) * Math.PI / 2) - 0.12 * f;
+    if (f > 0.93) r *= Math.sqrt(Math.max(0, 1 - ((f - 0.93) / 0.07) ** 2));
+    gp.push(new THREE.Vector2(Math.max(0.001, r), y));
+  }
+  const gGeo = new THREE.LatheGeometry(gp, 32);
+  gGeo.scale(0.72, 1, 1.12);
+  const grip = new THREE.Mesh(gGeo, bakelite);
+  grip.position.copy(new THREE.Vector3(xA + 0.2, yA, 0).addScaledVector(dir, neckLen + 0.35));
+  grip.rotation.z = -(Math.PI / 2 - alpha); grip.castShadow = true; grip.receiveShadow = true;
+  panGroup.add(grip);
+  const hole = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.09, 10, 28), steel);
+  hole.position.copy(new THREE.Vector3(xA + 0.2, yA, 0).addScaledVector(dir, neckLen + 0.35 + gripLen * 0.86));
+  hole.rotation.x = Math.PI / 2 - alpha;
+  hole.position.y += 0.78;
+  panGroup.add(hole);
+  handleTip = xA + (neckLen + gripLen) * Math.cos(alpha);
+}
+scene.add(panGroup);
+// hob glow: soft red halo round the pan base when the hob is on
+const glowCanvas = document.createElement('canvas'); glowCanvas.width = glowCanvas.height = 512;
+{
+  const g = glowCanvas.getContext('2d'), c = 256, R = 256;
+  const grd = g.createRadialGradient(c, c, R * 0.62, c, c, R);
+  grd.addColorStop(0, 'rgba(255,70,20,0.95)'); grd.addColorStop(0.35, 'rgba(255,55,15,0.55)'); grd.addColorStop(1, 'rgba(255,40,10,0)');
+  g.fillStyle = grd; g.beginPath(); g.arc(c, c, R, 0, Math.PI * 2); g.fill();
+}
+const glowTex = new THREE.CanvasTexture(glowCanvas);
+const glow = new THREE.Mesh(new THREE.PlaneGeometry(40, 40), new THREE.MeshBasicMaterial({ map: glowTex, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
+glow.rotation.x = -Math.PI / 2; glow.position.y = -HOB_DROP + 0.02;
+scene.add(glow);
+
+let surfKind = 'ceramic';
+function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+function drawPanFloor() {
+  const g = panFloorCanvas.getContext('2d'), W = panFloorCanvas.width, D = PAN_R * 200 + 0.04, px = W / D, r = rng(11);
+  g.fillStyle = '#2a2d32'; g.fillRect(0, 0, W, W);
+  for (let k = 0; k < 14000; k++) { g.fillStyle = `rgba(255,255,255,${r() * 0.07})`; g.fillRect(r() * W, r() * W, 1, 1); }
+  g.strokeStyle = 'rgba(255,255,255,.045)'; g.lineWidth = 1;
+  for (let k = 0; k < 120; k++) { g.beginPath(); g.arc(W / 2, W / 2, px * (0.5 + k * 0.1), 0, Math.PI * 2); g.stroke(); }
+  if ($('gridChk').checked) {
+    const lim = Math.floor(PAN_R * 100);
+    for (let k = -lim; k <= lim; k++) {
+      const major = k % 5 === 0, p = W / 2 + k * px, ext = Math.sqrt(Math.max(0, (lim + 0.4) ** 2 - k * k)) * px;
+      g.strokeStyle = `rgba(255,255,255,${major ? .24 : .09})`; g.lineWidth = major ? 1.8 : 0.9;
+      g.beginPath(); g.moveTo(p, W / 2 - ext); g.lineTo(p, W / 2 + ext); g.stroke();
+      g.beginPath(); g.moveTo(W / 2 - ext, p); g.lineTo(W / 2 + ext, p); g.stroke();
+    }
+    g.fillStyle = 'rgba(255,255,255,.4)'; g.font = `${px * 0.55}px system-ui, sans-serif`;
+    for (let k = -10; k <= 10; k += 5) if (k) g.fillText(`${k} cm`, W / 2 + k * px + 3, W / 2 + px * 10.6);
+  }
+  panFloorTex.needsUpdate = true;
+}
+function drawSurface() {
+  const g = surfCanvas.getContext('2d'), W = surfCanvas.width, px = W / SURF_CM;
+  const r = rng(7);
+  const pan = surfKind === 'ptfe';
+  panGroup.visible = pan;
+  surface.position.y = pan ? -HOB_DROP : 0;
+  if (surfKind === 'ceramic') {
+    const grd = g.createRadialGradient(W / 2, W / 2, 0, W / 2, W / 2, W * 0.7);
+    grd.addColorStop(0, '#5f7184'); grd.addColorStop(1, '#475565');
+    g.fillStyle = grd; g.fillRect(0, 0, W, W);
+    for (let k = 0; k < 9000; k++) { g.fillStyle = `rgba(${r() < .5 ? '20,28,40' : '210,225,240'},${0.05 + r() * 0.10})`; const s = 0.6 + r() * 1.8; g.fillRect(r() * W, r() * W, s, s); }
+    g.strokeStyle = 'rgba(255,255,255,.18)'; g.lineWidth = px * 0.5; g.beginPath(); g.arc(W / 2, W / 2, px * 16.5, 0, Math.PI * 2); g.stroke();
+    surfMat.roughness = 0.22; surfMat.clearcoat = 0.8; surfMat.envMapIntensity = 1;
+  } else if (pan) {
+    // black glass hob with printed cooking-zone rings
+    g.fillStyle = '#0b0c0e'; g.fillRect(0, 0, W, W);
+    for (let k = 0; k < 6000; k++) { g.fillStyle = `rgba(255,255,255,${r() * 0.025})`; g.fillRect(r() * W, r() * W, 1, 1); }
+    g.strokeStyle = 'rgba(210,215,225,.16)'; g.lineWidth = 3;
+    for (const rad of [9.5, 15.5]) { g.beginPath(); g.arc(W / 2, W / 2, px * rad, 0, Math.PI * 2); g.stroke(); }
+    surfMat.roughness = 0.12; surfMat.clearcoat = 1; surfMat.envMapIntensity = 0.25;
+    drawPanFloor();
+  } else {
+    g.fillStyle = '#8a5a33'; g.fillRect(0, 0, W, W);
+    for (let y = 0; y < W; y += 2) {
+      const v = Math.sin(y * 0.021 + Math.sin(y * 0.004) * 6) * 0.5 + 0.5;
+      g.fillStyle = `rgba(${60 + v * 60},${36 + v * 34},${18 + v * 16},${0.35 + 0.25 * r()})`; g.fillRect(0, y, W, 2);
+    }
+    for (let k = 0; k < 140; k++) { g.strokeStyle = `rgba(40,22,10,${0.08 + r() * 0.12})`; g.lineWidth = 1 + r() * 2; const y = r() * W; g.beginPath(); g.moveTo(0, y); g.bezierCurveTo(W * .3, y + (r() - .5) * 60, W * .7, y + (r() - .5) * 60, W, y + (r() - .5) * 30); g.stroke(); }
+    surfMat.roughness = 0.05; surfMat.clearcoat = 1.0; surfMat.envMapIntensity = 1;
+  }
+  if (!pan && $('gridChk').checked) {
+    const dark = surfKind === 'glass', lim = SURF_CM / 2;
+    for (let k = -lim; k <= lim; k++) {
+      const major = k % 5 === 0;
+      g.strokeStyle = dark ? `rgba(20,30,45,${major ? .38 : .16})` : `rgba(255,255,255,${major ? .26 : .10})`;
+      g.lineWidth = major ? 2.2 : 1.1;
+      const p = W / 2 + k * px;
+      g.beginPath(); g.moveTo(p, 0); g.lineTo(p, W); g.stroke();
+      g.beginPath(); g.moveTo(0, p); g.lineTo(W, p); g.stroke();
+    }
+    g.fillStyle = dark ? 'rgba(20,30,45,.55)' : 'rgba(255,255,255,.45)';
+    g.font = `${px * 0.55}px system-ui, sans-serif`;
+    for (let k = -10; k <= 10; k += 5) if (k) g.fillText(`${k} cm`, W / 2 + k * px + 4, W / 2 + px * 10.6);
+  }
+  surfTex.needsUpdate = true;
+}
+
+// ---------------------------------------------------------------- egg white mesh
+const N = sim.N, M = 2 * N - 1;
+const dxcm = sim.dx * 100, Lcm = sim.L * 100, dv = dxcm / 2;
+const HV = 3e-5;
+const wGeo = new THREE.BufferGeometry();
+const wPos = new Float32Array(M * M * 3), wNor = new Float32Array(M * M * 3), wUV = new Float32Array(M * M * 2), wCol = new Float32Array(M * M * 3).fill(1);
+for (let J = 0; J < M; J++) for (let I = 0; I < M; I++) {
+  const v = J * M + I;
+  wPos[v * 3] = (I / 2 + 0.5) * dxcm - Lcm / 2;
+  wPos[v * 3 + 2] = (J / 2 + 0.5) * dxcm - Lcm / 2;
+  wUV[v * 2] = (I / 2 + 0.5) / N; wUV[v * 2 + 1] = (J / 2 + 0.5) / N;
+  wNor[v * 3 + 1] = 1;
+}
+const idx = new Uint32Array((M - 1) * (M - 1) * 6);
+{ let k = 0; for (let J = 0; J < M - 1; J++) for (let I = 0; I < M - 1; I++) {
+  const a = J * M + I, b = a + 1, c = a + M, d = c + 1;
+  idx[k++] = a; idx[k++] = c; idx[k++] = b; idx[k++] = b; idx[k++] = c; idx[k++] = d;
+} }
+wGeo.setIndex(new THREE.BufferAttribute(idx, 1));
+wGeo.setAttribute('position', new THREE.BufferAttribute(wPos, 3).setUsage(THREE.DynamicDrawUsage));
+wGeo.setAttribute('normal', new THREE.BufferAttribute(wNor, 3).setUsage(THREE.DynamicDrawUsage));
+wGeo.setAttribute('uv', new THREE.BufferAttribute(wUV, 2));
+wGeo.setAttribute('color', new THREE.BufferAttribute(wCol, 3).setUsage(THREE.DynamicDrawUsage));
+wGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), Lcm);
+
+const texData = new Uint8Array(N * N * 4), roughData = new Uint8Array(N * N * 4), alphaData = new Uint8Array(N * N * 4);
+const phaseTex = new THREE.DataTexture(texData, N, N, THREE.RGBAFormat);
+phaseTex.magFilter = THREE.LinearFilter; phaseTex.minFilter = THREE.LinearFilter; phaseTex.needsUpdate = true;
+const roughTex = new THREE.DataTexture(roughData, N, N, THREE.RGBAFormat);
+roughTex.magFilter = THREE.LinearFilter; roughTex.minFilter = THREE.LinearFilter; roughTex.needsUpdate = true;
+// outline: the blurred wet mask, cut per pixel at 0.5 (smooth edge instead of grid steps)
+const alphaTex = new THREE.DataTexture(alphaData, N, N, THREE.RGBAFormat);
+alphaTex.magFilter = THREE.LinearFilter; alphaTex.minFilter = THREE.LinearFilter; alphaTex.needsUpdate = true;
+
+const whiteReal = new THREE.MeshPhysicalMaterial({
+  color: 0xfcfbf4, vertexColors: true, roughness: 1, roughnessMap: roughTex, metalness: 0, alphaMap: alphaTex, alphaTest: 0.5,
+  transmission: 1, transmissionMap: phaseTex, thickness: 1.2, thicknessMap: phaseTex, ior: 1.36,
+  attenuationColor: new THREE.Color(0xf1e9c6), attenuationDistance: 3.0,
+  specularIntensity: 1, clearcoat: 0.2, clearcoatRoughness: 0.05, envMapIntensity: 0.9,
+});
+const whiteData = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45, metalness: 0, alphaMap: alphaTex, alphaTest: 0.5 });
+const white = new THREE.Mesh(wGeo, whiteReal);
+white.receiveShadow = true; white.frustumCulled = false;
+const eggGroup = new THREE.Group();
+eggGroup.add(white);
+scene.add(eggGroup);
+
+// ---------------------------------------------------------------- yolk domes + white films (up to 4)
+const YR = 40, YS = 112, MR = 7;
+function polarIndex(rings, S) {
+  const out = [];
+  for (let k = 0; k < S; k++) out.push(0, 1 + (k + 1) % S, 1 + k);
+  for (let r = 0; r < rings - 1; r++) for (let k = 0; k < S; k++) {
+    const k1 = (k + 1) % S, a = 1 + r * S + k, b = 1 + r * S + k1, c = a + S, d = b + S;
+    out.push(a, b, c, b, d, c);
+  }
+  return out;
+}
+function polarGeo(rings) {
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(new Float32Array((1 + rings * YS) * 3), 3).setUsage(THREE.DynamicDrawUsage));
+  g.setIndex(polarIndex(rings, YS));
+  return g;
+}
+const COS = new Float32Array(YS), SIN = new Float32Array(YS);
+for (let k = 0; k < YS; k++) { COS[k] = Math.cos(2 * Math.PI * k / YS); SIN[k] = Math.sin(2 * Math.PI * k / YS); }
+const YOLK_RAW = new THREE.Color(0xf08a05), YOLK_SET = new THREE.Color(0xf0c060);
+const yolkViews = [];
+for (let q = 0; q < 4; q++) {
+  const yGeo = polarGeo(YR), cGeo = polarGeo(YR + MR);
+  const ym = new THREE.MeshPhysicalMaterial({
+    color: YOLK_RAW.clone(), roughness: 0.4, metalness: 0, clearcoat: 0.55, clearcoatRoughness: 0.28,
+    sheen: 0.25, sheenColor: new THREE.Color(0xffc060), emissive: new THREE.Color(0x6a2600), emissiveIntensity: 0.22, envMapIntensity: 0.65,
+  });
+  // the film is drawn as a see-through glossy layer (alpha), so the white and yolk beneath show through it
+  const fm = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff, roughness: 0.04, metalness: 0, transparent: true, opacity: 0.2, depthWrite: false,
+    clearcoat: 1, clearcoatRoughness: 0.03, specularIntensity: 1, envMapIntensity: 1.1,
+  });
+  const ydm = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  const fdm = new THREE.MeshStandardMaterial({ color: 0x2f5fd0, roughness: 0.4, transparent: true, opacity: 0.45, depthWrite: false });
+  const yolk = new THREE.Mesh(yGeo, ym); yolk.castShadow = true; yolk.receiveShadow = true; yolk.frustumCulled = false; yolk.visible = false;
+  const film = new THREE.Mesh(cGeo, fm); film.receiveShadow = true; film.frustumCulled = false; film.visible = false;
+  eggGroup.add(yolk); eggGroup.add(film);
+  yolkViews.push({ yolk, film, ym, fm, ydm, fdm, yPos: yGeo.attributes.position.array, cPos: cGeo.attributes.position.array, yGeo, cGeo });
+}
+
+// ---------------------------------------------------------------- shells (fade as each egg is cracked)
+const shells = [];
+const shellMat = new THREE.MeshStandardMaterial({ color: 0xe8cfa6, roughness: 0.75, transparent: true, opacity: 1, side: THREE.DoubleSide });
+function makeShell(x, z, ang) {
+  const p = sim.p0;
+  const mW = p.eggMass * p.whiteFrac / 1000, mY = p.eggMass * p.yolkFrac / 1000;
+  const Vc = mW / p.rhoW + mY / p.rhoY, kk = 0.12, si = 0.76;
+  const s = Math.cbrt(Vc / (Math.PI * si * si * (4 / 3 + 4 * kk * kk / 15)));
+  const a = s * 100, bb = si * s * 100;
+  const pts = []; let rmax = 0;
+  for (let k = 0; k <= 64; k++) {
+    const u = -1 + 2 * k / 64; const r = bb * Math.sqrt(Math.max(0, 1 - u * u)) * (1 + kk * u) * 1.035;
+    rmax = Math.max(rmax, r); pts.push(new THREE.Vector2(r, u * a * 1.03));
+  }
+  const g = new THREE.LatheGeometry(pts, 64);
+  g.rotateZ(-Math.PI / 2);
+  const mesh = new THREE.Mesh(g, shellMat.clone());
+  mesh.position.set(x * 100, rmax, z * 100);
+  mesh.rotation.y = -ang;
+  mesh.castShadow = true;
+  eggGroup.add(mesh);
+  shells.push({ mesh, t: 0.3 });
+}
+function clearShells() { for (const s of shells) { eggGroup.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); } shells.length = 0; }
+
+// ---------------------------------------------------------------- colour maps
+function lutFrom(stops) {
+  const cs = stops.map(c => new THREE.Color(c)), L = new Float32Array(256 * 3), n = cs.length - 1;
+  for (let k = 0; k < 256; k++) {
+    const t = k / 255 * n, i = Math.min(n - 1, Math.floor(t)), f = t - i, c = cs[i].clone().lerp(cs[i + 1], f);
+    L[k * 3] = c.r; L[k * 3 + 1] = c.g; L[k * 3 + 2] = c.b;
+  }
+  return L;
+}
+const VIR_S = ['#440154', '#3b528b', '#21918c', '#5ec962', '#fde725'], INF_S = ['#000004', '#420a68', '#932667', '#dd513a', '#fca50a', '#fcffa4'];
+const LUT = lutFrom(VIR_S), HLUT = lutFrom(INF_S);
+const THIN_C = new THREE.Color('#9fd8ff'), THICK_C = new THREE.Color('#2f5fd0'), BROWN_C = new THREE.Color('#5a3214'), GOLD_C = new THREE.Color('#d39a4a');
+const H_MAX_MM = 10;
+
+let viewMode = 'real';
+function setMode(m) {
+  viewMode = m;
+  white.material = m === 'real' ? whiteReal : whiteData;
+  for (const v of yolkViews) {
+    v.film.material = m === 'real' ? v.fm : v.fdm;
+    v.yolk.material = m === 'heat' ? v.ydm : v.ym;
+    v.fdm.color.set(m === 'thick' ? '#3b528b' : '#2f5fd0');
+  }
+  document.querySelectorAll('#modeSeg button').forEach(b => b.classList.toggle('on', b.dataset.mode === m));
+  const lg = $('legend');
+  if (m === 'real') lg.style.display = 'none';
+  else if (m === 'thick') {
+    lg.style.display = 'block';
+    $('legendBar').style.background = `linear-gradient(90deg, ${VIR_S.join(',')})`;
+    $('legendTicks').innerHTML = [0, 2.5, 5, 7.5, 10].map(v => `<span>${v}${v === 10 ? '+ mm' : ''}</span>`).join('');
+  } else if (m === 'heat') {
+    lg.style.display = 'block';
+    $('legendBar').style.background = `linear-gradient(90deg, ${INF_S.join(',')})`;
+    $('legendTicks').innerHTML = '<span>20 °C</span><span>40</span><span>60</span><span>80</span><span>100 °C</span>';
+  } else {
+    lg.style.display = 'block';
+    $('legendBar').style.background = 'linear-gradient(90deg, #9fd8ff, #2f5fd0)';
+    $('legendTicks').innerHTML = '<span>thin white</span><span>thick white (gel)</span>';
+  }
+  meshDirty = true;
+}
+
+// ---------------------------------------------------------------- mesh update
+const hs = new Float32Array(N * N), he = new Float32Array(N * N), mk = new Float32Array(N * N), tb = new Float32Array(N * N), wb = new Float32Array(N * N), hb = new Float32Array(N * N), Tm = new Float32Array(N * N);
+const Y = new Float32Array(M * M), tint = new Float32Array(N * N), fieldA = new Float32Array(N * N);
+let meshDirty = true;
+// value of a cell field at render vertex (I, J): exact, edge-average or 4-cell average (bilinear at half cells)
+function atV(arr, I, J) {
+  const i = I >> 1, j = J >> 1, id = j * N + i, oi = I & 1, oj = J & 1;
+  if (!oi && !oj) return arr[id];
+  if (oi && !oj) return 0.5 * (arr[id] + arr[id + 1]);
+  if (!oi && oj) return 0.5 * (arr[id] + arr[id + N]);
+  return 0.25 * (arr[id] + arr[id + 1] + arr[id + N] + arr[id + N + 1]);
+}
+const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+function blur5(src, dst) {
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const g = (ii) => src[j * N + Math.min(N - 1, Math.max(0, ii))];
+    tb[j * N + i] = (g(i - 2) + 4 * g(i - 1) + 6 * g(i) + 4 * g(i + 1) + g(i + 2)) / 16;
+  }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const g = (jj) => tb[Math.min(N - 1, Math.max(0, jj)) * N + i];
+    dst[j * N + i] = (g(j - 2) + 4 * g(j - 1) + 6 * g(j) + 4 * g(j + 1) + g(j + 2)) / 16;
+  }
+}
+function updateWhite() {
+  const h = sim.h, c = sim.c, NZ = sim.NZ, T = sim.T;
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const id = j * N + i, hh = h[id];
+    mk[id] = hh >= HV ? 1 : 0;
+    if (hh < HV) { hs[id] = 0; continue; }
+    let s = 4 * hh, w = 4;
+    if (i > 0 && h[id - 1] >= HV) { s += 2 * h[id - 1]; w += 2; }
+    if (i < N - 1 && h[id + 1] >= HV) { s += 2 * h[id + 1]; w += 2; }
+    if (j > 0 && h[id - N] >= HV) { s += 2 * h[id - N]; w += 2; }
+    if (j < N - 1 && h[id + N] >= HV) { s += 2 * h[id + N]; w += 2; }
+    if (i > 0 && j > 0 && h[id - N - 1] >= HV) { s += h[id - N - 1]; w++; }
+    if (i < N - 1 && j > 0 && h[id - N + 1] >= HV) { s += h[id - N + 1]; w++; }
+    if (i > 0 && j < N - 1 && h[id + N - 1] >= HV) { s += h[id + N - 1]; w++; }
+    if (i < N - 1 && j < N - 1 && h[id + N + 1] >= HV) { s += h[id + N + 1]; w++; }
+    hs[id] = s / w;
+  }
+  for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) {
+    const id = j * N + i;
+    if (mk[id]) { he[id] = hs[id]; continue; }
+    let s = 0, w = 0;
+    for (let dj = -1; dj <= 1; dj++) for (let di = -1; di <= 1; di++) {
+      const ii = i + di, jj = j + dj; if (ii < 0 || jj < 0 || ii >= N || jj >= N) continue;
+      const k = jj * N + ii; if (mk[k]) { s += hs[k]; w++; }
+    }
+    he[id] = w ? s / w : 0;
+  }
+  blur5(mk, wb); blur5(wb, wb);
+  blur5(he, hb); blur5(hb, hb);
+  for (let J = 0; J < M; J++) {
+    const j = J >> 1, oj = J & 1;
+    for (let I = 0; I < M; I++) {
+      const i = I >> 1, oi = I & 1, id = j * N + i;
+      let d, w;
+      if (!oi && !oj) { d = he[id]; w = wb[id]; }
+      else if (oi && !oj) { d = 0.5 * (he[id] + he[id + 1]); w = 0.5 * (wb[id] + wb[id + 1]); }
+      else if (!oi && oj) { d = 0.5 * (he[id] + he[id + N]); w = 0.5 * (wb[id] + wb[id + N]); }
+      else { d = 0.25 * (he[id] + he[id + 1] + he[id + N] + he[id + N + 1]); w = 0.25 * (wb[id] + wb[id + 1] + wb[id + N] + wb[id + N + 1]); }
+      const e = smoothstep(0.32, 0.95, w);
+      const v = d * e;
+      Y[J * M + I] = (w > 0.15 && v > 1e-6) ? v * 100 + 0.004 : -0.012;
+    }
+  }
+  if (viewMode === 'heat') { for (let id = 0; id < N * N; id++) { let s = 0; for (let k = 0; k < NZ; k++) s += T[id * NZ + k]; Tm[id] = s / NZ; } blur5(Tm, fieldA); }
+  else if (viewMode === 'phase') blur5(c, fieldA);
+  else if (viewMode === 'real') {
+    for (let id = 0; id < N * N; id++) tint[id] = Math.min(1, sim.brown[id] * 1.3) * (0.25 + 0.75 * (1 - smoothstep(0.55, 0.97, wb[id])));
+    blur5(tint, fieldA);
+  }
+  const inv2 = 1 / (2 * dv);
+  for (let J = 0; J < M; J++) for (let I = 0; I < M; I++) {
+    const v = J * M + I, y = Y[v];
+    wPos[v * 3 + 1] = y;
+    const yl = Y[I > 0 ? v - 1 : v], yr = Y[I < M - 1 ? v + 1 : v];
+    const yd = Y[J > 0 ? v - M : v], yu = Y[J < M - 1 ? v + M : v];
+    let nx = -(yr - yl) * inv2, nz = -(yu - yd) * inv2, ny = 1;
+    const il = 1 / Math.hypot(nx, ny, nz); wNor[v * 3] = nx * il; wNor[v * 3 + 1] = ny * il; wNor[v * 3 + 2] = nz * il;
+    let r = 1, g = 1, b = 1;
+    if (viewMode === 'thick') {
+      const k = Math.max(0, Math.min(255, Math.round(Math.max(0, y) * 10 / H_MAX_MM * 255))); r = LUT[k * 3]; g = LUT[k * 3 + 1]; b = LUT[k * 3 + 2];
+    } else if (viewMode === 'phase') {
+      const f = atV(fieldA, I, J); r = THIN_C.r + (THICK_C.r - THIN_C.r) * f; g = THIN_C.g + (THICK_C.g - THIN_C.g) * f; b = THIN_C.b + (THICK_C.b - THIN_C.b) * f;
+    } else if (viewMode === 'heat') {
+      const k = Math.max(0, Math.min(255, Math.round((atV(fieldA, I, J) - 20) / 80 * 255))); r = HLUT[k * 3]; g = HLUT[k * 3 + 1]; b = HLUT[k * 3 + 2];
+    } else {
+      const br = atV(fieldA, I, J);
+      // golden first, then dark brown as it burns
+      const g1 = Math.min(1, br * 2), g2 = Math.max(0, br * 2 - 1);
+      r = 1 + (GOLD_C.r - 1) * g1 + (BROWN_C.r - GOLD_C.r) * g2;
+      g = 1 + (GOLD_C.g - 1) * g1 + (BROWN_C.g - GOLD_C.g) * g2;
+      b = 1 + (GOLD_C.b - 1) * g1 + (BROWN_C.b - GOLD_C.b) * g2;
+    }
+    wCol[v * 3] = r; wCol[v * 3 + 1] = g; wCol[v * 3 + 2] = b;
+  }
+  wGeo.attributes.position.needsUpdate = true;
+  wGeo.attributes.normal.needsUpdate = true;
+  wGeo.attributes.color.needsUpdate = true;
+  // transmission (R) & thickness (G) for the realistic white; cooked white turns opaque and matt
+  for (let id = 0; id < N * N; id++) {
+    const f = c[id], hh = hs[id];
+    const set = Math.min(1, 0.4 * sim.phiMax[id] + 0.7 * sim.phiBar[id]), topSet = sim.Pz[id * NZ + NZ - 1];
+    texData[id * 4] = Math.round(255 * (1 - 0.05 * f) * (1 - set));
+    texData[id * 4 + 1] = Math.round(255 * Math.min(1, (sim.s[id] > 0 ? 0.0015 : hh) / 0.01));
+    texData[id * 4 + 2] = 0; texData[id * 4 + 3] = 255;
+    roughData[id * 4 + 1] = Math.round(255 * (0.07 + 0.5 * topSet));
+    roughData[id * 4 + 3] = 255;
+    alphaData[id * 4 + 1] = Math.round(255 * wb[id]); alphaData[id * 4 + 3] = 255;
+  }
+  phaseTex.needsUpdate = true; roughTex.needsUpdate = true; alphaTex.needsUpdate = true;
+}
+
+function sampleGrid(arr, xm, zm) {
+  const fi = (xm + sim.L / 2) / sim.dx - 0.5, fj = (zm + sim.L / 2) / sim.dx - 0.5;
+  const i = Math.max(0, Math.min(N - 2, Math.floor(fi))), j = Math.max(0, Math.min(N - 2, Math.floor(fj)));
+  const u = Math.min(1, Math.max(0, fi - i)), v = Math.min(1, Math.max(0, fj - j)), id = j * N + i;
+  return (1 - u) * (1 - v) * arr[id] + u * (1 - v) * arr[id + 1] + (1 - u) * v * arr[id + N] + u * v * arr[id + N + 1];
+}
+const rimVals = new Float32Array(64);
+function yolkBed(y) {
+  const a = y.ya;
+  let s = 0, n = 0;
+  for (let r = 1; r <= 6; r++) for (let k = 0; k < 24; k++) {
+    const rr = 0.7 * a * r / 6, th = 2 * Math.PI * k / 24;
+    s += sampleGrid(hb, y.x + rr * Math.cos(th), y.z + rr * Math.sin(th)); n++;
+  }
+  for (let k = 0; k < 64; k++) { const th = 2 * Math.PI * k / 64; rimVals[k] = sampleGrid(he, y.x + (a + 0.0015) * Math.cos(th), y.z + (a + 0.0015) * Math.sin(th)); }
+  const sorted = Array.from(rimVals).sort((p, q) => p - q);
+  return Math.max(0, Math.min(s / n, sorted[9]) - 0.0002);
+}
+function updateYolks() {
+  for (let q = 0; q < 4; q++) {
+    const V = yolkViews[q], y = sim.eggs[q];
+    V.yolk.visible = !!y;
+    if (!y) { V.film.visible = false; continue; }
+    const a = y.ya, H = y.yH, xc = y.x, zc = y.z, bed = yolkBed(y), yPos = V.yPos, cPos = V.cPos;
+    const t0 = sim.coatNormal(y, 0);
+    yPos[0] = xc * 100; yPos[1] = (bed + H) * 100; yPos[2] = zc * 100;
+    cPos[0] = xc * 100; cPos[1] = (bed + H + t0) * 100; cPos[2] = zc * 100;
+    for (let r = 1; r <= YR; r++) {
+      const phi = Math.PI / 2 * r / YR, sp = Math.sin(phi), cp = Math.cos(phi);
+      const rr = a * sp, T = H * cp;
+      const nl = Math.hypot(H * sp, a * cp), nr = H * sp / nl, ny = a * cp / nl;
+      const tn = sim.coatNormal(y, phi);
+      for (let k = 0; k < YS; k++) {
+        const x = xc + rr * COS[k], z = zc + rr * SIN[k], v = 1 + (r - 1) * YS + k;
+        yPos[v * 3] = x * 100; yPos[v * 3 + 1] = (bed + T) * 100; yPos[v * 3 + 2] = z * 100;
+        cPos[v * 3] = (x + tn * nr * COS[k]) * 100; cPos[v * 3 + 1] = (bed + T + tn * ny) * 100; cPos[v * 3 + 2] = (z + tn * nr * SIN[k]) * 100;
+      }
+    }
+    const tr = sim.coatNormal(y, Math.PI / 2), w = 0.003;
+    for (let m = 1; m <= MR; m++) {
+      const f = m / MR, rr = a + tr + w * f, lift = tr * (1 - f) * (1 - f) - (m === MR ? 0.0002 : 0);
+      for (let k = 0; k < YS; k++) {
+        const x = xc + rr * COS[k], z = zc + rr * SIN[k], v = 1 + (YR + m - 1) * YS + k;
+        cPos[v * 3] = x * 100; cPos[v * 3 + 1] = (Math.max(sampleGrid(he, x, z), bed) + lift) * 100; cPos[v * 3 + 2] = z * 100;
+      }
+    }
+    V.yGeo.attributes.position.needsUpdate = true; V.yGeo.computeVertexNormals();
+    V.cGeo.attributes.position.needsUpdate = true; V.cGeo.computeVertexNormals();
+    V.film.visible = t0 > 2e-5;
+    // cooking: top of the yolk goes pale and matt once set; the film over it turns opaque white
+    const topSet = Math.max(y.Py[sim.NZY - 1], 0.6 * y.Py[sim.NZY - 2]);
+    V.ym.color.copy(YOLK_RAW).lerp(YOLK_SET, topSet);
+    V.ym.roughness = 0.4 + 0.4 * topSet; V.ym.clearcoat = 0.55 * (1 - topSet);
+    V.fm.opacity = 0.2 + 0.75 * y.filmP; V.fm.roughness = 0.04 + 0.5 * y.filmP; V.fm.clearcoat = 1 - y.filmP;
+    if (viewMode === 'heat') {
+      const kt = (T) => Math.max(0, Math.min(255, Math.round((T - 20) / 80 * 255)));
+      const a1 = kt(sim.yolkMeanT(y)), a2 = kt(y.filmT);
+      V.ydm.color.setRGB(HLUT[a1 * 3], HLUT[a1 * 3 + 1], HLUT[a1 * 3 + 2]);
+      V.fdm.color.setRGB(HLUT[a2 * 3], HLUT[a2 * 3 + 1], HLUT[a2 * 3 + 2]);
+    }
+  }
+}
+
+// ---------------------------------------------------------------- cross-section chart
+const xc = $('xsec'), xg = xc.getContext('2d');
+function drawSection() {
+  const W = xc.width, Hh = xc.height, pad = 8;
+  xg.clearRect(0, 0, W, Hh);
+  const span = 9, vs = 1.5, pxPerCm = (W - 2 * pad) / (2 * span), baseY = Hh - 22;
+  const X = (xcm) => pad + (xcm + span) * pxPerCm, Yc = (hcm) => baseY - hcm * pxPerCm * vs;
+  const y0 = sim.eggs[0], cx = y0 ? y0.x : 0, cz = y0 ? y0.z : 0;
+  const jj = Math.max(0, Math.min(N - 1, Math.round((cz + sim.L / 2) / sim.dx - 0.5)));
+  xg.beginPath(); xg.moveTo(X(-span), baseY);
+  const cols = [];
+  for (let i = 0; i < N; i++) {
+    const xcm = ((i + 0.5) * sim.dx - sim.L / 2 - cx) * 100;
+    if (xcm < -span || xcm > span) continue;
+    const id = jj * N + i, hcm = sim.h[id] * 100;
+    xg.lineTo(X(xcm), Yc(hcm)); cols.push([xcm, sim.c[id], sim.phiMax[id]]);
+  }
+  xg.lineTo(X(span), baseY); xg.closePath();
+  const grd = xg.createLinearGradient(X(-span), 0, X(span), 0);
+  for (const [xcm, f, ps] of cols) {
+    const t = Math.min(1, Math.max(0, (xcm + span) / (2 * span)));
+    grd.addColorStop(t, ps > 0.5 ? 'rgba(245,245,240,.95)' : f > 0.5 ? 'rgba(190,210,255,.85)' : 'rgba(220,240,255,.45)');
+  }
+  xg.fillStyle = grd; xg.fill();
+  if (y0) {
+    const a = y0.ya * 100, Hy = y0.yH * 100, bedC = yolkBed(y0) * 100;
+    const top = [], filmL = [];
+    for (let k = 0; k <= 80; k++) {
+      const phi = -Math.PI / 2 + Math.PI * k / 80, sp = Math.sin(phi), cp = Math.cos(phi);
+      top.push([a * sp, bedC + Hy * cp]); filmL.push([a * sp, bedC + Hy * cp + sim.coatNormal(y0, Math.abs(phi)) * 100]);
+    }
+    xg.save(); xg.beginPath(); xg.rect(0, 0, W, baseY + 1); xg.clip();
+    xg.beginPath();
+    top.forEach(([x, y], k) => k ? xg.lineTo(X(x), Yc(y)) : xg.moveTo(X(x), Yc(y)));
+    xg.lineTo(X(a), Yc(bedC)); xg.lineTo(X(-a), Yc(bedC)); xg.closePath();
+    xg.fillStyle = 'rgba(240,138,5,.95)'; xg.fill();
+    // set part of the yolk (from the bottom)
+    const ys = sim.yolkSet(y0);
+    if (ys > 0.01) { xg.save(); xg.clip(); xg.fillStyle = 'rgba(240,200,100,.95)'; xg.fillRect(0, Yc(bedC + Hy * ys), W, Yc(bedC) - Yc(bedC + Hy * ys)); xg.restore(); }
+    xg.beginPath();
+    filmL.forEach(([x, y], k) => k ? xg.lineTo(X(x), Yc(y)) : xg.moveTo(X(x), Yc(y)));
+    xg.strokeStyle = y0.filmP > 0.5 ? 'rgba(255,255,255,.95)' : 'rgba(200,220,255,.9)'; xg.lineWidth = 2; xg.stroke();
+    xg.restore();
+  }
+  xg.strokeStyle = sim.Tpan > 30 ? `rgba(255,${Math.round(200 - (sim.Tpan - 20) * 0.6)},80,.8)` : 'rgba(255,255,255,.35)'; xg.lineWidth = 3;
+  xg.beginPath(); xg.moveTo(pad, baseY + 1); xg.lineTo(W - pad, baseY + 1); xg.stroke();
+  xg.fillStyle = 'rgba(200,208,220,.85)'; xg.font = '20px system-ui, sans-serif';
+  xg.fillText(y0 ? 'Section through egg 1 (heights ×1.5)' : 'Section (heights ×1.5)', pad, 20);
+  xg.font = '18px system-ui, sans-serif';
+  for (let k = -8; k <= 8; k += 4) xg.fillText(`${k}`, X(k) - 6, Hh - 3);
+  xg.fillText('cm', W - pad - 26, Hh - 3);
+  const hEqcm = (sim.hEq || 0) * 100;
+  xg.setLineDash([6, 6]); xg.strokeStyle = 'rgba(255,207,92,.6)'; xg.lineWidth = 1.5;
+  xg.beginPath(); xg.moveTo(pad, Yc(hEqcm)); xg.lineTo(W - pad, Yc(hEqcm)); xg.stroke(); xg.setLineDash([]);
+}
+
+// ---------------------------------------------------------------- HUD
+function grade(hu) { return hu >= 72 ? 'AA' : hu >= 60 ? 'A' : hu > 30 ? 'B' : 'C'; }
+function fmtTime(t) { if (t < 60) return `${t.toFixed(t < 10 ? 2 : 1)} s`; const m = Math.floor(t / 60), s = Math.floor(t % 60); return `${m}:${String(s).padStart(2, '0')}`; }
+function doneness(d) {
+  let s;
+  if (d.whiteSet < 0.1) s = 'Raw — just started';
+  else if (d.whiteSet < 0.6) s = 'Setting from the bottom and edges; top still raw';
+  else if (d.whiteSet < 0.95) s = 'White mostly set; raw white left near the yolk';
+  else if (d.yolkMid < 0.5) s = 'Sunny side up: white set, yolk runny' + (d.topSet < 0.97 || d.filmSet < 0.5 ? ' (thin raw layer on top by the yolk — a lid would set it)' : '');
+  else if (d.yolkTop < 0.5) s = 'Jammy: yolk centre set, top still soft';
+  else s = 'Yolk set (hard)';
+  if (d.brownFrac > 0.4 && d.Tpan > 215) s += ' · edges burning';
+  else if (d.brownFrac > 0.03) s += ' · crispy brown edges';
+  return s;
+}
+let lastHud = 0, hudPrev = null, cookingSeen = false;
+function updateHud(now, lagging) {
+  if (now - lastHud < 160) return; lastHud = now;
+  const d = sim.diagnostics();
+  $('rTime').textContent = fmtTime(d.t);
+  $('eggCount').textContent = d.eggs;
+  if (d.eggs > 1) { $('kDia').textContent = 'White area'; $('rDia').textContent = `${(d.area * 1e4).toFixed(0)} cm²`; }
+  else { $('kDia').textContent = 'White spread Ø'; $('rDia').textContent = d.eggs ? `${(d.diameter * 100).toFixed(1)} cm` : '–'; }
+  if (!d.eggs) { $('rAlb').textContent = '–'; $('rHU').textContent = '–'; $('rYI').textContent = '–'; }
+  else if (d.t < 0.6) { $('rHU').innerHTML = '<span style="color:var(--muted)">settling…</span>'; $('rAlb').innerHTML = '<span style="color:var(--muted)">settling…</span>'; $('rYI').textContent = d.yolkIndex.toFixed(2); }
+  else {
+    $('rAlb').textContent = `${(d.hAlbumen * 1000).toFixed(1)} mm${d.eggs > 1 ? ' avg' : ''}`;
+    const g = grade(d.HU); $('rHU').innerHTML = `${d.HU.toFixed(0)}${d.eggs > 1 ? ' avg' : ''}<span class="grade ${g}">${g}</span>`;
+    $('rYI').textContent = `${d.yolkIndex.toFixed(2)}  (${(d.yolkHeight * 100).toFixed(1)} / ${(d.yolkWidth * 100).toFixed(1)} cm)`;
+  }
+  $('rEq').textContent = `${((d.hEq || 0) * 1000).toFixed(1)} mm`;
+  let u = 0;
+  if (hudPrev && d.t > hudPrev.t + 1e-6) u = Math.max(0, (Math.sqrt(d.area) - hudPrev.A) / Math.sqrt(Math.PI) / (d.t - hudPrev.t)) * 1000;
+  else if (hudPrev) u = hudPrev.u;
+  hudPrev = { t: d.t, A: Math.sqrt(d.area), u };
+  $('rU').textContent = u >= 10 ? `${u.toFixed(0)} mm/s` : `${u.toFixed(2)} mm/s`;
+  $('rVol').textContent = d.Vw > 0 ? `${(d.volume / d.Vw * 100).toFixed(3)} %` : '–';
+  $('rFilm').textContent = d.coatTop > 2e-5 ? `${(d.coatTop * 1000).toFixed(1)} top · ${(d.coatSide * 1000).toFixed(1)} side mm` : 'none';
+  // cooking block
+  const cooking = sim.p0.panSet > 21 || d.Tpan > 25;
+  if (cooking) cookingSeen = true;
+  const showCook = cooking || (cookingSeen && d.whiteSet > 0.01);
+  $('hud').classList.toggle('cooking', showCook);
+  $('hudTitle').textContent = showCook ? (d.eggs > 1 ? `Frying ${d.eggs} eggs` : 'Frying an egg') : (d.eggs > 1 ? `${d.eggs} raw eggs on a flat surface` : 'Raw egg on a flat surface');
+  if (showCook) {
+    const tgt = sim.p0.panSet;
+    const load = d.Qegg > 15 ? ` · eggs ${Math.round(d.Qegg)} W` : '';
+    $('rPan').textContent = tgt <= 20.5 ? `${d.Tpan.toFixed(0)} °C · heat off${load}` : `${d.Tpan.toFixed(0)} °C (set ${tgt.toFixed(0)})${load}`;
+    $('rWset').textContent = `${Math.round(d.whiteSet * 100)} %  · top ${Math.round(d.topSet * 100)} %`;
+    $('rYset').textContent = !d.eggs ? '–' : d.yolkMid < 0.5 ? (d.yolkSet > 0.05 ? `runny centre · underside ${Math.round(d.yolkSet * 100)} % firm` : 'runny') : d.yolkTop < 0.5 ? 'jammy · centre set' : 'set';
+    $('rDone').innerHTML = d.eggs ? `${doneness(d)} <small>(model estimate)</small>` : '–';
+  }
+  let st;
+  if (placing) st = '<b>Tap the surface to place an egg.</b>';
+  else if (!playing) st = '<b>Paused.</b>';
+  else if (!d.eggs) st = '<b>Empty.</b> Add an egg with ＋ Egg.';
+  else if (crackT > 0) st = '<b>Removing the shell…</b>';
+  else if (showCook && d.whiteSet > 0.02) st = `<b>Cooking</b> — white ${d.whiteT.toFixed(0)} °C on average.`;
+  else if (u < 0.2 && d.t > 1) st = '<b>Settled</b> — the white has stopped spreading.';
+  else if (d.t < 0.15) st = '<b>Collapsing</b> — inertia-limited slump.';
+  else st = '<b>Spreading</b> — viscosity resisting gravity.';
+  if (lagging) st += ' <span style="color:var(--warn)">Running slower than the chosen speed on this device.</span>';
+  $('status').innerHTML = st;
+  drawSection();
+}
+
+// ---------------------------------------------------------------- UI wiring
+function buildRows() {
+  document.querySelectorAll('.row[data-key]').forEach(row => {
+    const key = row.dataset.key, [label, min, max, step, log, fmt, tag, note] = SPEC[key];
+    const tagHtml = tag ? `<span class="tag ${tag}">${tag === 'm' ? 'measured' : tag === 'c' ? 'calibrated' : 'assumed'}</span>` : '';
+    row.innerHTML = `<div class="lab"><span class="name">${label}${tagHtml}</span><span class="val"></span></div>
+      <input type="range" aria-label="${label}"><div class="note">${note}</div>`;
+    const inp = row.querySelector('input');
+    if (log) { inp.min = Math.log10(min); inp.max = Math.log10(max); inp.step = 0.005; }
+    else { inp.min = min; inp.max = max; inp.step = step; }
+    inp.addEventListener('input', () => onSlider(key, inp));
+    inp.addEventListener('change', () => onSliderCommit(key));
+  });
+  syncRows();
+}
+function syncRows() {
+  document.querySelectorAll('.row[data-key]').forEach(row => {
+    const key = row.dataset.key, [, , , , log, fmt] = SPEC[key];
+    const inp = row.querySelector('input');
+    inp.value = log ? Math.log10(state[key]) : state[key];
+    row.querySelector('.val').textContent = fmt(state[key]);
+  });
+  const hobN = nearestHob(state.panSet), hobIdx = hobN === 'off' ? 0 : hobN;
+  const exact = HOB[hobIdx] === Math.round(state.panSet);
+  document.querySelectorAll('[data-hob]').forEach(b => b.classList.toggle('on', exact && +b.dataset.hob === hobIdx));
+  document.querySelectorAll('#hobTable tr[data-h]').forEach(tr => tr.classList.toggle('on', state.panSet > 21 && +tr.dataset.h === hobIdx));
+}
+function onSlider(key, inp) {
+  const [, , , , log, fmt, , , live] = SPEC[key];
+  const v = log ? Math.pow(10, +inp.value) : +inp.value;
+  state[key] = v;
+  inp.parentElement.querySelector('.val').textContent = fmt(v);
+  if (key === 'exag') { eggGroup.scale.y = v; return; }
+  if (key === 'panSet') { if (surfKind === 'ptfe') pushParams(); syncRows(); return; }
+  if (live) pushParams();
+  if (key === 'tauThick' || key === 'yolkIndex') clearPresetHighlight();
+}
+function onSliderCommit(key) {
+  if (key === 'panSet') { if (state.panSet > 21 && surfKind !== 'ptfe') setSurface('ptfe'); return; }
+  const live = SPEC[key][8];
+  if (!live) { clearPresetHighlight(); restart(); }
+}
+function clearPresetHighlight() { document.querySelectorAll('[data-preset]').forEach(b => b.classList.remove('on')); }
+function setHob(n) {
+  state.panSet = HOB[n];
+  if (n > 0 && surfKind !== 'ptfe') { syncRows(); setSurface('ptfe'); return; }
+  pushParams(); syncRows();
+}
+function setSurface(kind) {
+  surfKind = kind; state.theta = SURF[kind].theta;
+  if (kind !== 'ptfe') state.panSet = 20;
+  sim.setWall(kind === 'ptfe' ? PAN_R : 0);
+  document.querySelectorAll('[data-surf]').forEach(x => x.classList.toggle('on', x.dataset.surf === kind));
+  syncRows(); drawSurface();
+  // keep eggs inside the pan
+  if (kind === 'ptfe') layout = layout.map(e => { const r = Math.hypot(e.x, e.z), lim = PAN_R - 0.035; return r > lim ? { ...e, x: e.x * lim / r, z: e.z * lim / r } : e; });
+  restart();
+}
+document.querySelectorAll('[data-preset]').forEach(b => b.addEventListener('click', () => {
+  Object.assign(state, PRESETS[b.dataset.preset]);
+  document.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x === b));
+  syncRows(); restart();
+}));
+document.querySelectorAll('[data-surf]').forEach(b => b.addEventListener('click', () => setSurface(b.dataset.surf)));
+document.querySelectorAll('[data-hob]').forEach(b => b.addEventListener('click', () => setHob(+b.dataset.hob)));
+document.querySelectorAll('[data-mode]').forEach(b => b.addEventListener('click', () => setMode(b.dataset.mode)));
+const LAYOUTS = {
+  1: [[0, 0]], 2: [[-0.055, 0], [0.055, 0]],
+  3: [[0, -0.055], [-0.055, 0.04], [0.055, 0.04]],
+  4: [[-0.05, -0.05], [0.05, -0.05], [-0.05, 0.05], [0.05, 0.05]],
+};
+function setLayout(n) { layout = LAYOUTS[n].map(([x, z]) => ({ x, z, ang: rndAng() })); restart(); setView('3d'); }
+document.querySelectorAll('[data-layout]').forEach(b => b.addEventListener('click', () => setLayout(+b.dataset.layout)));
+$('pClear').onclick = () => { layout = []; restart(); };
+$('gridChk').addEventListener('change', drawSurface);
+$('vReset').onclick = () => setView('3d'); $('vTop').onclick = () => setView('top'); $('vSide').onclick = () => setView('side');
+
+let playing = true, speed = 0.5, crackT = 0;
+const bPlay = $('bPlay');
+function setPlaying(p) { playing = p; bPlay.innerHTML = p ? '❚❚ <span class="lbl">Pause</span>' : '▶ <span class="lbl">Play</span>'; bPlay.classList.toggle('on', !p); }
+bPlay.onclick = () => setPlaying(!playing);
+$('speed').onchange = (e) => { speed = +e.target.value; };
+$('bRestart').onclick = () => restart();
+const panel = $('panel');
+if (isCoarse) panel.classList.add('closed');
+$('bPanel').onclick = () => { panel.classList.toggle('closed'); $('bPanel').classList.toggle('on', !panel.classList.contains('closed')); };
+$('bPanel').classList.toggle('on', !panel.classList.contains('closed'));
+$('bNotes').onclick = () => $('notes').classList.add('open');
+$('notesClose').onclick = () => $('notes').classList.remove('open');
+$('notes').addEventListener('click', (e) => { if (e.target.id === 'notes') $('notes').classList.remove('open'); });
+const hudMore = $('hudMore');
+if (isCoarse) { hudMore.style.display = 'none'; $('hudToggle').textContent = '▸'; }
+$('hudToggle').onclick = () => { const open = hudMore.style.display === 'none'; hudMore.style.display = open ? '' : 'none'; $('hudToggle').textContent = open ? '▾' : '▸'; };
+
+// ---------------------------------------------------------------- placing eggs by tapping the surface
+let placing = false, downAt = null;
+const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), hit = new THREE.Vector3();
+const marker = new THREE.Mesh(new THREE.RingGeometry(2.6, 3.0, 48), new THREE.MeshBasicMaterial({ color: 0xffb238, transparent: true, opacity: 0.8, depthWrite: false }));
+marker.rotation.x = -Math.PI / 2; marker.position.y = 0.05; marker.visible = false; scene.add(marker);
+function startPlacing() {
+  if (sim.eggs.length >= 4) { flashHint('The pan already holds 4 eggs — the most this model allows.'); return; }
+  placing = true; $('bAdd').classList.add('on');
+  $('placeText').innerHTML = 'Tap the surface where you want to crack the egg. <b>' + (4 - sim.eggs.length) + '</b> left.';
+  $('placeHint').classList.add('open', 'top');
+  if (isCoarse) { panel.classList.add('closed'); $('bPanel').classList.remove('on'); }
+}
+function stopPlacing() { placing = false; $('bAdd').classList.remove('on'); $('placeHint').classList.remove('open'); marker.visible = false; }
+let hintTimer = 0;
+function flashHint(msg) { $('placeText').textContent = msg; $('placeHint').classList.add('open', 'top'); clearTimeout(hintTimer); hintTimer = setTimeout(() => { if (!placing) $('placeHint').classList.remove('open'); }, 2200); }
+$('bAdd').onclick = () => placing ? stopPlacing() : startPlacing();
+$('pAdd').onclick = () => startPlacing();
+$('placeCancel').onclick = () => stopPlacing();
+function groundPoint(ev) {
+  const r = canvas.getBoundingClientRect();
+  ndc.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+  ray.setFromCamera(ndc, camera);
+  return ray.ray.intersectPlane(plane, hit) ? hit.clone() : null;
+}
+function placeable(xm, zm) {
+  if (sim.p0.wallR > 0) return Math.hypot(xm, zm) <= sim.p0.wallR - 0.035;
+  const lim = sim.L / 2 - 0.045; return Math.abs(xm) <= lim && Math.abs(zm) <= lim;
+}
+canvas.addEventListener('pointerdown', (e) => { downAt = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+canvas.addEventListener('pointermove', (e) => {
+  if (!placing || e.pointerType === 'touch') return;
+  const p = groundPoint(e); if (!p) return;
+  marker.visible = true; marker.position.x = p.x; marker.position.z = p.z;
+  marker.material.color.set(placeable(p.x / 100, p.z / 100) ? 0xffb238 : 0xff4040);
+});
+canvas.addEventListener('pointerup', (e) => {
+  if (!placing || !downAt) return;
+  const moved = Math.hypot(e.clientX - downAt.x, e.clientY - downAt.y), dt = performance.now() - downAt.t;
+  downAt = null;
+  if (moved > 8 || dt > 600) return; // that was a drag to orbit, not a tap
+  const p = groundPoint(e); if (!p) return;
+  const xm = p.x / 100, zm = p.z / 100;
+  if (!placeable(xm, zm)) { $('placeText').textContent = sim.p0.wallR > 0 ? 'Too close to the pan wall — tap nearer the middle.' : 'Too close to the edge — tap nearer the middle.'; return; }
+  addEggAt(xm, zm);
+  stopPlacing();
+});
+function addEggAt(xm, zm, ang = rndAng()) {
+  pushParams();
+  const y = sim.addEgg(xm, zm, ang);
+  if (!y) return false;
+  layout.push({ x: xm, z: zm, ang });
+  makeShell(xm, zm, ang);
+  hudPrev = null; meshDirty = true;
+  setPlaying(true);
+  return true;
+}
+
+function restart() {
+  pushParams();
+  sim.reset(layout);
+  hudPrev = null; cookingSeen = sim.p0.panSet > 21;
+  clearShells();
+  for (const e of layout) makeShell(e.x, e.z, e.ang);
+  crackT = layout.length ? 0.55 : 0;
+  setPlaying(true);
+  meshDirty = true;
+}
+
+addEventListener('resize', () => {
+  renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+});
+
+// ---------------------------------------------------------------- loop
+buildRows();
+drawSurface();
+restart();
+setView('3d');
+$('loading').remove();
+let last = performance.now();
+const budget = isCoarse ? 10 : 14;
+function frame(now) {
+  const wdt = Math.min(0.05, (now - last) / 1000); last = now;
+  let lagging = false;
+  if (playing) {
+    if (crackT > 0) crackT -= wdt;
+    for (let q = shells.length - 1; q >= 0; q--) {
+      const s = shells[q];
+      if (crackT > 0.3) continue; // at a re-crack, shells hold for a moment, then fade
+      s.t -= wdt;
+      s.mesh.material.opacity = Math.max(0, Math.min(1, s.t / 0.3));
+      if (s.t <= 0) { eggGroup.remove(s.mesh); s.mesh.geometry.dispose(); s.mesh.material.dispose(); shells.splice(q, 1); }
+    }
+    if (crackT < 0.3) {
+      const want = wdt * speed;
+      const got = sim.advance(want, budget);
+      lagging = got < want * 0.8 && want > 0.002;
+      if (got > 0) meshDirty = true;
+    }
+  }
+  const heat = Math.max(0, Math.min(1, (sim.Tpan - 30) / 200));
+  glow.material.opacity = panGroup.visible ? 0.6 * heat : 0;
+  if (meshDirty) { updateWhite(); updateYolks(); meshDirty = false; }
+  controls.update();
+  renderer.render(scene, camera);
+  updateHud(now, lagging);
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+window.__egg = { sim, setMode, setView, restart, state, setPlaying, camera, controls, setHob, setLayout, addEggAt, setSurface,
+  jump(t) { while (sim.t < t - 1e-9) sim.step(Math.min(sim.dtNext, t - sim.t)); crackT = 0; for (const s of shells) s.mesh.visible = false; meshDirty = true; lastHud = 0; } };
+</script>
+</body>
+</html>
